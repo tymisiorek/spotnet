@@ -17,7 +17,7 @@ from spotipy.oauth2 import SpotifyOAuth
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:5173"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -43,8 +43,4 @@ async def callback(request: Request):
     if not code:
         return {"error": "no code in request"}
     token_info = sp_oauth.get_access_token(code)
-    return {
-        "access_token":  token_info["access_token"],
-        "refresh_token": token_info["refresh_token"],
-        "expires_in":    token_info["expires_in"]
-    }
+    return RedirectResponse("http://localhost:5173/hello")
