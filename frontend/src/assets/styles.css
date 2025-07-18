@@ -1,0 +1,110 @@
+:root {
+  --background-color: #121212;
+  --surface-color:    #1e1e1e;
+  --primary-color:    #1db954;
+  --accent-color:     #1ed760;
+  --text-color:       #ffffff;
+  --muted-text:       #bbbbbb;
+  --font-family:      'Helvetica Neue', Arial, sans-serif;
+  --transition:       0.3s ease-in-out;
+  --border-radius:    0.5rem;
+  --max-width:        1200px;
+  --spacing:          1rem;
+}
+
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+  background-color: var(--background-color);
+  color: var(--text-color);
+  font-family: var(--font-family);
+  line-height: 1.6;
+}
+
+a {
+  color: var(--primary-color);
+  text-decoration: none;
+  transition: color var(--transition), transform var(--transition);
+}
+
+a:hover {
+  color: var(--accent-color);
+  transform: translateY(-2px);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  margin-bottom: 0.5em;
+  font-weight: 600;
+}
+
+
+.container {
+  width: 100%;
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: var(--spacing);
+}
+
+
+.button {
+  display: inline-block;
+  background-color: var(--primary-color);
+  color: var(--text-color);
+  padding: 0.75em 1.5em;
+  border: none;
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  font-size: 1rem;
+  transition: background-color var(--transition),
+              transform var(--transition),
+              box-shadow var(--transition);
+}
+
+.button:hover {
+  background-color: var(--accent-color);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+
+.card {
+  background-color: var(--surface-color);
+  border-radius: var(--border-radius);
+  padding: var(--spacing);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+  transition: transform var(--transition),
+              box-shadow var(--transition);
+}
+
+.card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.6);
+}
+
+body.fade-in-on-load {
+  animation: fadeIn var(--transition) forwards;
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Reveal on scroll */
+.reveal {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity var(--transition),
+              transform var(--transition);
+}
+.reveal.active {
+  opacity: 1;
+  transform: translateY(0);
+}

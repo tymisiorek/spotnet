@@ -1,6 +1,6 @@
 spotnet-venv/
+backend/.env
 .env
-
 
 
 # Logs
@@ -30,3 +30,13 @@ dist-ssr
 
 ____pycache__/
 *.py[cod]
+instance/
+
+node_modules/
+frontend/node_modules/
+dist/
+frontend/dist/
+frontend/.vite/
+
+*.egg-info/
+pip-wheel-metadata/
