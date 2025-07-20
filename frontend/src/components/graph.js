@@ -2,10 +2,8 @@
 import * as THREE from 'three';
 import ForceGraph3D from '3d-force-graph';
 
-/* ================= Configuration ================= */
-
-const BACKEND_BASE      = 'http://127.0.0.1:8000';  // adjust for production origin
-const POINT_SIZE        = 4.5;                     // node sprite size
+const BACKEND_BASE = 'http://127.0.0.1:8000'; 
+const POINT_SIZE = 4.5;
 const COMMUNITY_COLORS  = [
   0x1f77b4, 0xaec7e8, 0xff7f0e, 0xffbb78, 0x2ca02c,
   0x98df8a, 0xd62728, 0xff9896, 0x9467bd, 0xc5b0d5,
@@ -13,34 +11,32 @@ const COMMUNITY_COLORS  = [
   0xc7c7c7, 0xbcbd22, 0xdbdb8d, 0x17becf, 0x9edae5
 ];
 
-const GALAXY_ARMS       = 4;     // number of spiral arms
-const TWIST             = 2.0;   // spiral tightness
-const SKELETON_MIN      = 200;   // min points per arm skeleton
-const SKELETON_MAX      = 500;   // max points per arm skeleton
+const GALAXY_ARMS = 4;     // number of spiral arms
+const TWIST = 2.0;   // spiral tightness
+const SKELETON_MIN = 200;   // min points per arm skeleton
+const SKELETON_MAX = 500;   // max points per arm skeleton
 const PERP_OFFSET_FRACT = 0.02;  // 2% of R_MAX for twig fan‑out
-const TWIG_OPACITY      = 0.08;  // twig edge opacity
+const TWIG_OPACITY = 0.08;  // twig edge opacity
 
-/* ============= Initialize 3D Force Graph ============= */
 
 document.addEventListener('DOMContentLoaded', () => {
   const container = document.getElementById('3d-graph');
   if (!container) return;
 
   const fg = ForceGraph3D()(container)
-    .d3Force('charge', null)      // disable dynamic forces
+    .d3Force('charge', null)  // disable dynamic forces
     .cooldownTicks(0)
     .enableNodeDrag(false)
     .nodeVisibility(() => false)  // render custom points
     .linkVisibility(() => false); // render custom lines
 
-  // Fetch precomputed graph.json
+  // Fetch graph.json
   fetch(`${BACKEND_BASE}/data/graph?_cb=${Date.now()}`)
     .then(res => res.json())
     .then(data => buildScene(container, fg, data))
     .catch(err => console.error('Graph fetch error', err));
 });
 
-/* ================= Scene Construction ================= */
 
 function buildScene(container, fg, data) {
   prunePrevious(fg.scene());

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import os
 import math
 import csv
@@ -6,42 +5,40 @@ import json
 import random
 from pathlib import Path
 from dotenv import load_dotenv, find_dotenv
+import igraph as ig
 
-# ---------- Hyperparameters ----------
-NODE_TARGET    = -1            # include all nodes
-SAMPLING_MODE  = "none"        # "grid" | "random" | "none"
-MAX_PER_CELL   = 200           # only if grid sampling
-EDGE_FACTOR    = 3.0           # ignored when MAX_EDGES < 0
-DEGREE_CAP     = 0             # unlimited
-EDGE_MODE      = "random"
-INCLUDE_EDGES  = True
-SHUFFLE_NODES  = False
-MAX_EDGES      = -1            # <0 => include every edge
-SEED           = 1337          # deterministic randomness
+NODE_TARGET = -1            # include all nodes
+SAMPLING_MODE = "none"        # "grid" | "random" | "none"
+MAX_PER_CELL = 200           # only if grid sampling
+EDGE_FACTOR = 3.0           # ignored when MAX_EDGES < 0
+DEGREE_CAP = 0             # unlimited
+EDGE_MODE = "random"
+INCLUDE_EDGES = True
+SHUFFLE_NODES = False
+MAX_EDGES = -1            # <0 => include every edge
+SEED = 112
 
 # Terrain (community‑terraced + noise bump)
-NOISE_SCALE    = 20.0
-NOISE_FREQ     = 1.5
-Z_RANGE        = 400.0         # total height span across communities
+NOISE_SCALE = 20.0
+NOISE_FREQ = 1.5
+Z_RANGE = 400.0         # total height span across communities
 
 # Galaxy layout params
-GALAXY_ARMS    = 4             # number of spiral arms
-TWIST          = 2.0           # spiral tightness
-RADIAL_JITTER  = 0.05          # ±5% radial noise
-DEGREE_BIAS    = 0.4           # how strongly hubs pull inward
+GALAXY_ARMS = 4             # number of spiral arms
+TWIST = 2.0           # spiral tightness
+RADIAL_JITTER = 0.05          # +-5% radial noise
+DEGREE_BIAS = 0.4           # how strongly hubs pull inward
 ARM_DISK_RATIO = 0.7           # 70% of nodes on arms, 30% in disk
 
-# Paths
 load_dotenv(find_dotenv())
-ROOT_DIR    = os.getenv("ROOT_DIR", str(Path(__file__).parent.parent))
-DATA_DIR    = Path(ROOT_DIR) / "data"
-NODES_CSV   = DATA_DIR / "network_nodes.csv"
-EDGES_CSV   = DATA_DIR / "network_edges.csv"
-OUTPUT_JSON = DATA_DIR / "graph.json"
-
+ROOT_DIR = os.getenv("ROOT_DIR", f"{Path(__file__).parent.parent}")
+DATA_DIR = Path(f"{ROOT_DIR}/data")
+NODES_CSV = Path(f"{DATA_DIR}/network_nodes.csv")
+EDGES_CSV = Path(f"{DATA_DIR}/network_edges.csv")
+OUTPUT_JSON = Path(f"{DATA_DIR}/graph.json")
 random.seed(SEED)
 
-# ---------- 2D Value Noise (for gentle terrain bumps) ----------
+#value noise
 def _hash_int(i, j):
     n = (i * 1836311903) ^ (j * 2971215073) ^ SEED
     n ^= (n >> 13)
@@ -64,11 +61,11 @@ def value_noise(x, y):
     v11 = _rand_unit(xi+1, yi+1)
     a = v00 + (v10 - v00)*u
     b = v01 + (v11 - v01)*u
-    return a + (b - a)*v  # in [0,1]
+    return a + (b - a)*v 
 
-# ---------- Build Graph with Galaxy Layout ----------
+
 def build_graph():
-    # 1) Load nodes
+    #load nodes, compute bounds, sample nodes + edges, find communities, make galaxy layout
     nodes = []
     with open(NODES_CSV, newline="", encoding="utf-8") as f:
         for row in csv.DictReader(f):
@@ -80,7 +77,6 @@ def build_graph():
     total_nodes = len(nodes)
     if total_nodes == 0:
         raise RuntimeError("No nodes found in CSV")
-
     # Compute original spatial bounds
     xs = [n["x"] for n in nodes]
     ys = [n["y"] for n in nodes]
@@ -89,12 +85,10 @@ def build_graph():
     rangeX = maxX - minX or 1.0
     rangeY = maxY - minY or 1.0
 
-    # 2) Node sampling (here, all nodes)
     selected_nodes = list(nodes)
     served_nodes = len(selected_nodes)
     selected_ids = {n["id"] for n in selected_nodes}
 
-    # 3) Edge sampling (all edges)
     served_edges = []
     total_edges_file = 0
     if INCLUDE_EDGES:
@@ -105,11 +99,6 @@ def build_graph():
                 if s in selected_ids and t in selected_ids:
                     served_edges.append({"source": s, "target": t})
 
-    # 4) Community detection via Leiden (~30 clusters)
-    try:
-        import igraph as ig
-    except ImportError:
-        raise RuntimeError("igraph required: pip install igraph")
     id_to_index = {n["id"]: i for i, n in enumerate(selected_nodes)}
     g_obj = ig.Graph()
     g_obj.add_vertices(served_nodes)
@@ -119,12 +108,11 @@ def build_graph():
     ])
     part = g_obj.community_leiden(resolution=0.05)  # ~30 communities
     membership = part.membership
-    num_comms  = max(membership) + 1
-    degrees    = g_obj.degree()
-    max_deg    = max(degrees) or 1
+    num_comms = max(membership) + 1
+    degrees = g_obj.degree()
+    max_deg = max(degrees) or 1
 
-    # 5) Galaxy layout: override x,y, assign arm
-    #    R_MAX set to half the original bounding diagonal
+    # 5) Galaxy layout: override x,y, assign arm R_MAX set to half the original bounding diagonal
     diag = math.hypot(rangeX, rangeY)
     R_MAX = diag / 2.0
 
@@ -156,7 +144,7 @@ def build_graph():
         n["x"] = r * math.cos(theta)
         n["y"] = r * math.sin(theta)
 
-    # 6) Terraced Z assignment (community bands + noise bump)
+    # terraced Z assignment (community bands + noise bump)
     for i, n in enumerate(selected_nodes):
         if num_comms > 1:
             base_h = (membership[i] / (num_comms - 1)) * Z_RANGE
@@ -171,7 +159,6 @@ def build_graph():
         n["community"] = membership[i]
         n["z"]         = base_h + bump
 
-    # 7) Output JSON
     result = {
         "nodes": selected_nodes,
         "links": served_edges,
