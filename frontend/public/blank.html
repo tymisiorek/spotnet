@@ -1,18 +1,19 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0"
-    />
-    <title>SpotNet Logged In</title>
-  </head>
-  <body>
-    <h1>Logged in</h1>
-    <script>
-      const params = new URLSearchParams(window.location.search)
-      console.log('Got token:', params.get('token'))
-    </script>
-  </body>
+<head>
+  <meta charset="utf-8" />
+  <title>3D Graph Page</title>
+  <style>
+    /* fill the viewport */
+    body { margin: 0; overflow: hidden; }
+    #3d-graph { width: 100vw; height: 100vh; }
+  </style>
+</head>
+<body>
+  <!-- container for the force graph -->
+  <div id="3d-graph"></div>
+
+  <!-- entry point for this page’s JS -->
+  <script type="module" src="/src/components/graph.js"></script>
+</body>
 </html>

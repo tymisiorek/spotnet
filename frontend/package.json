@@ -10,5 +10,15 @@
   },
   "devDependencies": {
     "vite": "^7.0.0"
-  }
+  },
+  "dependencies": {
+    "3d-force-graph": "^1.78.3",
+    "papaparse": "^5.5.3",
+    "three": "^0.178.0"
+  },
+  "main": "vite.config.js",
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": ""
 }
