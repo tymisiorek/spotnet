@@ -12,20 +12,3 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 });
-
-
-document.addEventListener('DOMContentLoaded', () => {
-  // …your existing login‑button logic…
-  
-
-  // graph init
-  const container = document.getElementById('3d-graph');
-  if (container) {
-    ForceGraph3D()(container)
-      .graphData({
-        nodes: [{ id: 'A' }, { id: 'B' }, { id: 'C' }],
-        links: [{ source: 'A', target: 'B' }, { source: 'B', target: 'C' }]
-      })
-      .cameraPosition({ z: 50 });
-  }
-});

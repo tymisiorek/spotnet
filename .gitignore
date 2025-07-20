@@ -40,3 +40,8 @@ frontend/.vite/
 
 *.egg-info/
 pip-wheel-metadata/
+
+build/
+package-lock.json
+
+data/

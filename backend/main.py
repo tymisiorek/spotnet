@@ -1,39 +1,62 @@
 import os
 from pathlib import Path
 from dotenv import load_dotenv
-
-from flask import Flask, request, jsonify, redirect, url_for
+from flask import Flask, request, jsonify, redirect
 from flask_cors import CORS
 from spotipy.oauth2 import SpotifyOAuth
 
-# load environment variables from .env
 env_path = Path(__file__).parent / ".env"
-load_dotenv(dotenv_path=env_path)
+if env_path.exists():
+    load_dotenv(env_path)
 
-CLIENT_ID     = os.getenv("SPOTIFY_CLIENT_ID")
-CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
-REDIRECT_URI  = os.getenv("SPOTIFY_REDIRECT_URI")
+# --- Config values ---
+BACKEND_HOST = os.getenv("BACKEND_HOST", "127.0.0.1")
+BACKEND_PORT = int(os.getenv("BACKEND_PORT", "8000"))
+FRONTEND_ORIGIN = (os.getenv("FRONTEND_ORIGIN", "") or "").rstrip("/")
+SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
+SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
+SPOTIFY_REDIRECT_URI = os.getenv("SPOTIFY_REDIRECT_URI")
 
-app = Flask(
-    __name__,
-    static_folder=str(Path(__file__).parent.parent / "frontend" / "public"),
-    static_url_path=""
+# Dist vs public decision (dev uses public, prod can swap to dist)
+STATIC_DIR = Path(__file__).parent.parent / "frontend" / (
+    "dist" if (FRONTEND_ORIGIN == "" and (Path(__file__).parent.parent / "frontend" / "dist").exists()) else "public"
 )
 
-# allow calls from your frontend
-CORS(app, origins=["http://localhost:5173"], methods=["GET", "POST"], allow_headers=["*"])
+app = Flask(__name__, static_folder=str(STATIC_DIR), static_url_path="")
+
+cors_origins = []
+if FRONTEND_ORIGIN:
+    cors_origins.append(FRONTEND_ORIGIN)
+
+# Allow dev direct access to data endpoint
+cors_resources = {
+    r"/auth/*": {"origins": cors_origins or ["http://localhost:5173"]},
+    r"/data/*": {"origins": "*"}
+}
+CORS(app, resources=cors_resources, methods=["GET", "POST"], allow_headers="*")
+
+# Spotify OAuth client
+sp_oauth = SpotifyOAuth(
+    client_id=SPOTIFY_CLIENT_ID,
+    client_secret=SPOTIFY_CLIENT_SECRET,
+    redirect_uri=SPOTIFY_REDIRECT_URI,
+    scope="user-library-read"
+)
+
+def frontend_url(path: str) -> str:
+    """
+    Returns absolute front-end URL if FRONTEND_ORIGIN set,
+    else relative path (served by same origin in prod single-domain mode).
+    """
+    if not path.startswith("/"):
+        path = "/" + path
+    if FRONTEND_ORIGIN:
+        return FRONTEND_ORIGIN + path
+    return path
 
 @app.route("/ping")
 def ping():
     return jsonify(pong=True)
-
-# configure Spotify OAuth
-sp_oauth = SpotifyOAuth(
-    client_id=CLIENT_ID,
-    client_secret=CLIENT_SECRET,
-    redirect_uri=REDIRECT_URI,
-    scope="user-library-read"
-)
 
 @app.route("/auth/login")
 def login():
@@ -45,10 +68,14 @@ def callback():
     code = request.args.get("code")
     if not code:
         return jsonify(error="no code in request"), 400
+
     token_info = sp_oauth.get_access_token(code)
-    # token_info is a dict with access_token, expires_at, etc.
-    return redirect(url_for("static", filename="blank.html"))
+    # Redirect to graph page
+    return redirect(frontend_url("/blank.html"))
+
+@app.route("/api/me")
+def api_me():
+    return jsonify(status="ok")
 
 if __name__ == "__main__":
-    # adjust host/port to match your REDIRECT_URI if needed
-    app.run(host="127.0.0.1", port=8000, debug=True)
+    app.run(host=BACKEND_HOST, port=BACKEND_PORT, debug=(os.getenv("FLASK_ENV") == "development"))

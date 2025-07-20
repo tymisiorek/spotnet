@@ -1,9 +1,8 @@
-// frontend/src/graph-page.js
+// frontend/src/components/graph.js
 
 import * as THREE      from 'three';
 import ForceGraph3D    from '3d-force-graph';
 
-// wait for the DOM so we know #3d-graph exists
 document.addEventListener('DOMContentLoaded', () => {
   const container = document.getElementById('3d-graph');
   if (!container) return;
