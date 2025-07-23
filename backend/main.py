@@ -72,26 +72,53 @@ def callback():
 def api_me():
     return jsonify(status="ok")
 
+
 data_path  = Path(__file__).parent.parent / "data"
+NODES_CSV = data_path / "network_nodes.csv"
+EDGES_CSV = data_path / "network_edges.csv"
+print(NODES_CSV, EDGES_CSV)
+
 
 @app.route("/data/graph")
 def data_graph():
-    graph_path = data_path / "graph.json"
-    if not graph_path.exists():
-        return jsonify(error="graph file not found"), 404
-    with open(graph_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
+    print(NODES_CSV, EDGES_CSV)
+    if not (NODES_CSV.exists() and EDGES_CSV.exists()):
+        return jsonify(error="nodes.csv or edges.csv not found"), 404
 
-    nodes = data.get("nodes", [])
-    for n in nodes:
-        if "community" not in n or n["community"] is None:
-            n["community"] = 0
-        if "degree" not in n or n["degree"] is None:
-            n["degree"] = 0
-        if "z" not in n or n["z"] is None:
-            n["z"] = 0.0
+    nodes = []
+    with NODES_CSV.open(newline="", encoding="utf-8") as f:
+        r = csv.DictReader(f)
+        for row in r:
+            deg = float(row.get("degree", 0) or 0)
+            node = {
+                "id": row["id"],
+                "name": row.get("name", ""),
+                "followers": float(row.get("followers", 0) or 0),
+                "popularity": float(row.get("popularity", 0) or 0),
+                "genres": row.get("genres", ""),
+                "chart_hits": row.get("chart_hits", ""),
+                "top_chart": row.get("top_chart", ""),
+                "x": float(row["x"]),
+                "y": float(row["y"]),
+                "z": deg * 20.0,
+                "degree": deg
+            }
+            nodes.append(node)
 
-    return jsonify(data)
+    links = []
+    with EDGES_CSV.open(newline="", encoding="utf-8") as f:
+        r = csv.DictReader(f)
+        for row in r:
+            s = row.get("source")
+            t = row.get("target")
+            if s and t:
+                links.append({"source": s, "target": t})
+
+    return jsonify({
+        "nodes": nodes,
+        "links": links,
+        "meta": {"node_count": len(nodes), "edge_count": len(links)}
+    })
 
 if __name__ == "__main__":
     app.run(host=BACKEND_HOST, port=BACKEND_PORT, debug=(os.getenv("FLASK_ENV") == "development"))
