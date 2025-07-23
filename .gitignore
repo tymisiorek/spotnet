@@ -45,3 +45,8 @@ build/
 package-lock.json
 
 data/
+
+# Ignore any folder named 'cache' anywhere
+**/cache/
+.cache/
+*.cache
