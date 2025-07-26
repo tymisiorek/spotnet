@@ -10,11 +10,11 @@ from datashader.bundling import hammer_bundle
 load_dotenv(find_dotenv())
 
 root = Path(os.getenv("ROOT", Path(__file__).parent))
-data = f"{root}data"
+data = Path(f"{root}data")
 
-nodes_csv = f"{data}network_nodes.csv"
-edges_csv = f"{data}network_edges.csv"
-out_csv = f"{data}edges_bundled.csv"
+nodes_csv = Path(f"{data}network_nodes.csv")
+edges_csv = Path(f"{data}network_edges.csv")
+out_csv = Path(f"{data}edges_bundled.csv")
 
 BATCH_SIZE = 20000 # hammer_bundle batch size
 THRESH_FRAC = 0.15 # xy distance fraction that defines ramp start

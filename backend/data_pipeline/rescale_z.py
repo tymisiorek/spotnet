@@ -5,9 +5,9 @@ import os
 
 load_dotenv(find_dotenv())
 root = Path(os.getenv("ROOT_DIR", Path(__file__).parent))
-data = f"{root}data"
-nodes = f"{data}network_nodes.csv"
-out = f"{data}network_nodes_rescaled.csv" 
+data = Path(f"{root}data")
+nodes = Path(f"{data}network_nodes.csv")
+out = Path(f"{data}network_nodes_rescaled.csv")
 
 df = pd.read_csv(nodes)
 
