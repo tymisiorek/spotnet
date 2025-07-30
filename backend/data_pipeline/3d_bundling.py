@@ -10,10 +10,10 @@ import os
 
 # hyperparams
 GRID_N = 128 # voxel resolution per axis
-SIGMA = 2.5 # Gaussian blur radius, in voxels
-ITERATIONS = 30 # KDE/advection passes
-STEP_FACTOR = 0.7 # fraction of a voxel moved per iteration
-SAMPLES_PER_EDGE = 20 # how many samples along each edge
+SIGMA = 2.7 # Gaussian blur radius, in voxels
+ITERATIONS = 22 # KDE/advection passes
+STEP_FACTOR = 0.8 # fraction of a voxel moved per iteration
+SAMPLES_PER_EDGE = 20 # how many samples along each edge (≥ 10)
 
 
 load_dotenv(find_dotenv())
