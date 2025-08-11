@@ -75,7 +75,7 @@ def api_me():
 #paths for graph route
 data  = Path(__file__).parent.parent / "data"
 nodes_csv = Path(f"{data}/network_nodes.csv")
-edges_csv = Path(f"{data}/edges_bundled_3d.csv")
+edges_csv = Path(f"{data}/edges_bundled_3d_test.csv")
 
 def _float(x, default=0.0):
     try:

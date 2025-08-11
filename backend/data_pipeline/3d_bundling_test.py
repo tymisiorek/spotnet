@@ -9,20 +9,21 @@ from scipy.spatial.distance import cdist, pdist
 from tqdm import tqdm
 
 # ---------------------- Hyperparams (tunable) ----------------------
-GRID_N = 128                                    # Higher resolution for better precision
-SIGMAS = [16.0, 12.0, 8.0, 5.0, 3.0]           # Smaller sigmas for tighter bundling
-ITERS_PER_STAGE = [8, 12, 16, 20, 24]          # More iterations for convergence
-STEP_ETA = 0.8                                  # More conservative step size
-LAPLACE_LAMBDA = 0.05                           # Moderate smoothing
+GRID_N = 64                                     # Smaller grid for faster testing
+SIGMAS = [10.0, 6.0, 4.0, 2.5, 1.5]            # Even smaller sigmas for tighter bundling
+ITERS_PER_STAGE = [8, 12, 16, 20, 24]          # More iterations for better convergence
+STEP_ETA = 1.0                                  # More aggressive step size
+LAPLACE_LAMBDA = 0.03                           # Lighter smoothing to preserve curves
 SAMPLES_PER_EDGE = 32                           # More samples for smoother curves
 EPS_DENS = 1e-8                                 # Smaller epsilon
-BATCHES = 16                                    # More batches for better mixing
-TAN_SUPPRESS = 0.5                              # Moderate tangent suppression
-JITTER_VOXELS = 2.0                             # More initial jitter
-ENDPOINT_MASS_SCALE = 0.05                      # Very low endpoint contribution
+BATCHES = 8                                     # Fewer batches for testing
+TAN_SUPPRESS = 0.3                              # Weaker tangent suppression to allow more curvature
+JITTER_VOXELS = 3.0                             # More initial jitter
+ENDPOINT_MASS_SCALE = 0.02                      # Even lower endpoint contribution
 EXTRA_GRAD_EPS = 0.0                            # No extra gradient
 MIN_DENSITY_THRESH = 1e-6                       # Lower density threshold
-CHUNK_SIZE = 5000                               # Smaller chunks for memory efficiency
+CHUNK_SIZE = 2000                               # Smaller chunks for memory efficiency
+TEST_SIZE = 5000                                # Number of edges to test with
 
 # ---------------------- IO ----------------------
 load_dotenv(find_dotenv())
@@ -31,8 +32,9 @@ data_dir = root_dir / "data"
 
 nodes_csv = data_dir / "network_nodes.csv"
 edges_csv = data_dir / "network_edges.csv"
-out_csv   = data_dir / "edges_bundled_3d.csv"
+out_csv   = data_dir / "edges_bundled_3d_test.csv"
 
+print(f"Loading data...")
 nodes_df = (pd.read_csv(nodes_csv, usecols=["id","x","y","z"])
               .set_index("id")
               .astype({"x":"float32","y":"float32","z":"float32"}))
@@ -41,6 +43,27 @@ nodes_df.index = nodes_df.index.astype("string")
 edges_df = pd.read_csv(edges_csv, usecols=["source","target"])
 edges_df[["source","target"]] = edges_df[["source","target"]].astype("string")
 edges_df.index.name = "edge_id"
+
+# Create smaller test dataset
+print(f"Original dataset: {len(edges_df):,} edges")
+if len(edges_df) > TEST_SIZE:
+    # Sample edges randomly but ensure we keep connected components
+    test_edges = edges_df.sample(n=TEST_SIZE, random_state=42)
+    
+    # Get all unique nodes in the test edges
+    test_nodes = set(test_edges["source"].unique()) | set(test_edges["target"].unique())
+    
+    # Filter nodes dataframe to only include test nodes
+    nodes_df = nodes_df.loc[list(test_nodes)]
+    
+    # Update edges to only include those where both source and target are in our node set
+    test_edges = test_edges[
+        test_edges["source"].isin(test_nodes) & 
+        test_edges["target"].isin(test_nodes)
+    ]
+    
+    edges_df = test_edges.reset_index(drop=True)
+    print(f"Test dataset: {len(edges_df):,} edges, {len(nodes_df):,} nodes")
 
 # ---------------------- Normalization ----------------------
 mins = nodes_df[["x","y","z"]].min()
@@ -54,6 +77,7 @@ E = len(edges_df)
 S = SAMPLES_PER_EDGE
 pts = np.empty((E, S, 3), dtype=np.float32)
 
+print(f"Building {E:,} polylines with {S} samples each...")
 for eidx, (src, tgt) in tqdm(
         enumerate(edges_df.itertuples(index=False, name=None), start=0),
         total=E, desc="Init polylines"):
@@ -74,12 +98,13 @@ sample_mass = (edge_lengths / S).astype(np.float32)[:, None]
 sample_mass = np.broadcast_to(sample_mass, (E, S)).copy()
 
 # Better initialization with stronger curvature and jitter
+print("Initializing curved paths...")
 np.random.seed(42)  # Different seed for different patterns
 voxel_size_world = 1.0 / (GRID_N - 1)
 jitter_std = (JITTER_VOXELS * voxel_size_world)
 
 # Create more pronounced curved initialization
-for eidx in range(E):
+for eidx in tqdm(range(E), desc="Creating curves"):
     p0 = pts[eidx, 0]
     p1 = pts[eidx, -1]
     
@@ -92,9 +117,9 @@ for eidx in range(E):
     perp2 = np.cross(direction, perp1)
     perp2 = perp2 / (np.linalg.norm(perp2) + 1e-8)
     
-    # Stronger curve magnitudes
-    curve_mag1 = np.random.uniform(-0.15, 0.15)
-    curve_mag2 = np.random.uniform(-0.1, 0.1)
+    # Much stronger curve magnitudes for more pronounced curves
+    curve_mag1 = np.random.uniform(-0.3, 0.3)
+    curve_mag2 = np.random.uniform(-0.25, 0.25)
     
     # Apply cubic curve for more natural paths
     t_vals = np.linspace(0, 1, S)
@@ -198,6 +223,7 @@ def trilinear_sample_vec3(field, points):
     return out
 
 # ---------------------- KDEEB loop ----------------------
+print(f"\nStarting bundling with {E:,} edges...")
 for stage, (sigma, niter) in enumerate(zip(SIGMAS, ITERS_PER_STAGE), start=1):
     print(f"\n=== Stage {stage}: σ={sigma:.1f}, {niter} iterations ===")
     
@@ -292,9 +318,28 @@ for stage, (sigma, niter) in enumerate(zip(SIGMAS, ITERS_PER_STAGE), start=1):
                     tnorm[tnorm == 0] = 1.0
                     that = tangent / tnorm
                     
-                    # Project delta onto tangent and subtract
+                    # Project delta onto tangent and subtract (weaker suppression for more curvature)
                     tan_component = (delta * that).sum(axis=2, keepdims=True) * that
                     delta = delta - TAN_SUPPRESS * tan_component
+                
+                # Add curvature preservation force to maintain initial curves
+                curvature_force = np.zeros_like(delta)
+                for i in range(1, S-1):  # Skip endpoints
+                    # Compute current curvature at this point
+                    if i > 0 and i < S-1:
+                        prev_point = sub[:, i-1, :]
+                        curr_point = sub[:, i, :]
+                        next_point = sub[:, i+1, :]
+                        
+                        # Compute curvature as deviation from straight line
+                        straight_line = 0.5 * (prev_point + next_point)
+                        curvature = curr_point - straight_line
+                        
+                        # Apply curvature preservation force
+                        curvature_force[:, i] = 0.1 * curvature
+                
+                # Add curvature preservation
+                delta = delta + curvature_force
                 
                 # Add density-based attraction force
                 density_attraction = np.zeros_like(delta)
@@ -315,12 +360,15 @@ for stage, (sigma, niter) in enumerate(zip(SIGMAS, ITERS_PER_STAGE), start=1):
                         pert_density = trilinear_sample(rho, pert_pts)
                         density_diff = pert_density - current_density
                         
-                        # Move toward higher density
-                        if density_diff > 0:
-                            density_attraction[:, i] += pert * density_diff * 0.1
+                        # Move toward higher density (handle array comparison)
+                        positive_diff_mask = density_diff > 0
+                        if np.any(positive_diff_mask):
+                            # Broadcast pert to match the number of points with positive density difference
+                            pert_broadcast = pert[None, :]  # Shape: (1, 3)
+                            density_attraction[positive_diff_mask, i] += pert_broadcast * density_diff[positive_diff_mask, None] * 0.2
                 
-                # Combine mean-shift and density attraction
-                delta = delta + 0.3 * density_attraction
+                # Combine mean-shift and density attraction with stronger attraction
+                delta = delta + 0.5 * density_attraction
 
                 # Track movement for convergence monitoring
                 move_magnitude = np.linalg.norm(delta[move_mask_sub], axis=-1)
@@ -406,3 +454,5 @@ straight_line_lengths = np.linalg.norm(pts[:, -1, :] - pts[:, 0, :], axis=1)
 bundled_lengths = np.sum(np.linalg.norm(pts[:, 1:, :] - pts[:, :-1, :], axis=2), axis=1)
 length_ratio = bundled_lengths / straight_line_lengths
 print(f"Mean path length ratio (curved/straight): {length_ratio.mean():.3f}")
+
+print(f"\nTest completed! Check {out_csv} for results.")
