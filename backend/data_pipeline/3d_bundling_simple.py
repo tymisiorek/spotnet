@@ -13,10 +13,10 @@ NUM_ITERATIONS = 10                     # iterations of bundling
 INITIAL_BANDWIDTH_HMAX = 0.08           # will be recalculated from data
 KERNEL_REDUCTION_LAMBDA = 0.7           # bandwidth decay per iteration
 EPSILON_GRADIENT = 1e-5                 # min gradient magnitude to move
-SMOOTHING_ITERATIONS = 3                # Laplacian smoothing passes
+SMOOTHING_ITERATIONS = 4                # Laplacian smoothing passes
 GRID_N = 80                             # grid resolution per axis
-TEST_SIZE = 15000                       # subsample edges for debugging
-SAMPLES_PER_EDGE = 20                   # polyline samples per edge
+TEST_SIZE = 15000                      # subsample edges for debugging
+SAMPLES_PER_EDGE = 15                   # polyline samples per edge
 SELF_AVOIDANCE_BATCHES = 4              # batches for self-avoidance
 
 # ---------------------- IO ----------------------
