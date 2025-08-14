@@ -1,16 +1,16 @@
-// graph.js – optimized 3D spheres + click-to-identify (node.id)
+// graph.js – optimized 3D spheres + click + exact-name search (node.name)
 import ForceGraph3D from '3d-force-graph';
 import * as THREE from 'three';
 
 const BACKEND_BASE = 'http://127.0.0.1:8000';
 
 // ---------- tweakables (optimized for performance) --------------------
-const EDGE_CAP   = 50000;    // reduced from 100000
-const SEG_CAP    = 2000000;  // reduced from 5000000
+const EDGE_CAP   = 150000;
+const SEG_CAP    = 20000000;
 
-const SPHERE_RADIUS = 6;
+const SPHERE_RADIUS = 7;
 const EDGE_COLOR    = 0x888888;
-const EDGE_OPACITY  = 0.20;
+const EDGE_OPACITY  = 0.30;
 
 /* Palette for the first 20 communities; others fall back to grey */
 const PALETTE = [
@@ -20,17 +20,26 @@ const PALETTE = [
   0x46f0f0, 0xf032e6, 0xbcf60c, 0xfabebe, 0x008080
 ];
 const FALLBACK_COLOR = 0x444444;
-const TOP_K = 20;
+const TOP_K = 25;
 
 // Performance settings
 const LOD_DISTANCES = { high: 0, medium: 1000, low: 5000 };
-const EDGE_VISIBILITY_DISTANCE = 15000;
+// const EDGE_VISIBILITY_DISTANCE = 15000; // optional if you enable distance culling
 
 // Picking/tooltip globals
 const DISPLAY_FIELD = 'name';
 let PICKABLE_MESHES = [];
 let ACTIVE_HIT = null;
 let TOOLTIP_EL = null;
+
+// Search index and highlight
+let NAME_INDEX = null; // Map<string_lower, node>
+let HIGHLIGHT_MESH = null;
+
+// UI refs
+let UI_INPUT = null;
+let UI_BTN = null;
+let UI_STATUS = null;
 
 document.addEventListener('DOMContentLoaded', () => {
   const el = document.getElementById('3d-graph');
@@ -88,7 +97,25 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // UI wiring
+  UI_INPUT = document.getElementById('searchInput');
+  UI_BTN = document.getElementById('searchBtn');
+  UI_STATUS = document.getElementById('searchStatus');
+  UI_BTN?.addEventListener('click', (e) => {
+    e.preventDefault();
+    const q = (UI_INPUT?.value ?? '').trim();
+    if (!q) { setStatus(''); return; }
+    focusNodeByName(q, fg, cam, controls);
+  });
+  UI_INPUT?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      UI_BTN?.click();
+    }
+  });
+
   ensureTooltip(el);
+  ensureHighlightMesh(fg.scene());
 
   // ---------------- fetch graph data -----------------------------------
   const url = `${BACKEND_BASE}/data/graph?_cb=${Date.now()}`;
@@ -120,6 +147,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // optimized node rendering with instancing (+ picking metadata)
       setupInstancedNodes(fg, nodes, topCommunities);
+
+      // build exact-match name index (case-insensitive)
+      NAME_INDEX = buildNameIndex(nodes);
 
       fg.graphData({ nodes, links });
       addOptimizedBundledEdges(fg.scene(), links);
@@ -258,6 +288,7 @@ function installPicking(fg, cam) {
 
     if (!hits.length) {
       hideTooltip();
+      highlightOff();
       return;
     }
     const hit = hits[0];
@@ -266,8 +297,11 @@ function installPicking(fg, cam) {
 
     if (node) {
       showTooltip(node, hit.point, fg, cam);
+      highlightAt(node.x, node.y, node.z || 0);
+      setStatus(node?.name || '');
     } else {
       hideTooltip();
+      highlightOff();
     }
   });
 }
@@ -291,6 +325,25 @@ function ensureTooltip(containerEl) {
   containerEl.appendChild(TOOLTIP_EL);
 }
 
+function ensureHighlightMesh(scene) {
+  if (HIGHLIGHT_MESH) return;
+  const geom = new THREE.SphereGeometry(SPHERE_RADIUS * 1.7, 8, 8);
+  const mat  = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true, depthTest: false, transparent: true, opacity: 0.9 });
+  HIGHLIGHT_MESH = new THREE.Mesh(geom, mat);
+  HIGHLIGHT_MESH.visible = false;
+  HIGHLIGHT_MESH.renderOrder = 9999;
+  scene.add(HIGHLIGHT_MESH);
+}
+
+function highlightAt(x, y, z) {
+  if (!HIGHLIGHT_MESH) return;
+  HIGHLIGHT_MESH.position.set(x, y, z);
+  HIGHLIGHT_MESH.visible = true;
+}
+function highlightOff() {
+  if (HIGHLIGHT_MESH) HIGHLIGHT_MESH.visible = false;
+}
+
 function screenToNDC(evt, canvas, outVec2) {
   const rect = canvas.getBoundingClientRect();
   const x = ((evt.clientX - rect.left) / rect.width) * 2 - 1;
@@ -300,7 +353,7 @@ function screenToNDC(evt, canvas, outVec2) {
 
 function showTooltip(node, point, fg, cam) {
   ACTIVE_HIT = { node, point: point.clone() };
-  const text = node?.[DISPLAY_FIELD] ?? node?.name ?? node?.name ?? '(unknown)';
+  const text = node?.[DISPLAY_FIELD] ?? '(unknown)';
   TOOLTIP_EL.textContent = String(text);
   TOOLTIP_EL.style.display = 'block';
   updateTooltipPosition(fg, cam);
@@ -317,10 +370,57 @@ function updateTooltipPosition(fg, cam) {
   const p = ACTIVE_HIT.point.clone().project(cam);
   const halfW = canvas.clientWidth / 2;
   const halfH = canvas.clientHeight / 2;
-  const sx = (p.x * halfW) + halfW;
-  const sy = (-p.y * halfH) + halfH;
-  TOOLTIP_EL.style.left = `${sx}px`;
-  TOOLTIP_EL.style.top  = `${sy}px`;
+  TOOLTIP_EL.style.left = `${(p.x * halfW) + halfW}px`;
+  TOOLTIP_EL.style.top  = `${(-p.y * halfH) + halfH}px`;
+}
+
+// --------------------- search / navigation ----------------------------
+function buildNameIndex(nodes) {
+  const idx = new Map();
+  for (const n of nodes) {
+    const k = normalizeName(n?.name);
+    if (k) idx.set(k, n); // if duplicates exist, last wins; fine for simple exact search
+  }
+  return idx;
+}
+
+function normalizeName(s) {
+  if (!s || typeof s !== 'string') return '';
+  return s.trim().toLowerCase();
+}
+
+function setStatus(msg, ok = true) {
+  if (!UI_STATUS) return;
+  UI_STATUS.textContent = msg;
+  UI_STATUS.style.color = ok ? '#d1ffd1' : '#ffd1d1';
+}
+
+function focusNodeByName(rawName, fg, cam, controls) {
+  if (!NAME_INDEX) return;
+  const key = normalizeName(rawName);
+  const node = NAME_INDEX.get(key);
+  if (!node) {
+    setStatus('Not found', false);
+    hideTooltip();
+    highlightOff();
+    return;
+  }
+
+  // center controls on node, move camera to a reasonable distance
+  const target = new THREE.Vector3(node.x, node.y, node.z || 0);
+  controls.target.copy(target);
+
+  const camDir = new THREE.Vector3(0, 0, 1); // arbitrary forward direction
+  const dist = SPHERE_RADIUS * 80; // heuristic view distance
+  const newPos = target.clone().add(camDir.multiplyScalar(dist));
+  cam.position.copy(newPos);
+  cam.updateProjectionMatrix();
+
+  // show tooltip at node and highlight ring
+  showTooltip(node, target, fg, cam);
+  highlightAt(target.x, target.y, target.z);
+
+  setStatus(node.name || '');
 }
 
 // --------------------- helpers ----------------------------------------

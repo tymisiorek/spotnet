@@ -4,12 +4,33 @@
   <meta charset="utf-8" />
   <title>3D Graph Page</title>
   <style>
-    body { margin: 0; overflow: hidden; }
+    body { margin: 0; overflow: hidden; font-family: system-ui, sans-serif; }
     #3d-graph { width: 100vw; height: 100vh; }
+    #ui {
+      position: fixed; top: 12px; left: 12px; z-index: 20;
+      display: flex; gap: 8px; align-items: center;
+      background: rgba(0,0,0,0.55); color: #fff;
+      padding: 8px 10px; border-radius: 8px; backdrop-filter: blur(4px);
+    }
+    #searchInput {
+      width: 260px; padding: 6px 8px; border-radius: 6px; border: none; outline: none;
+    }
+    #searchBtn {
+      padding: 6px 10px; border: none; border-radius: 6px; cursor: pointer;
+    }
+    #searchStatus { font-size: 12px; opacity: 0.9; }
   </style>
 </head>
 <body>
   <div id="3d-graph"></div>
+
+  <!-- UI overlay -->
+  <div id="ui">
+    <input id="searchInput" type="text" placeholder="Search artist by exact name…" />
+    <button id="searchBtn">Search</button>
+    <span id="searchStatus"></span>
+  </div>
+
   <script type="module" src="/src/components/graph.js"></script>
 </body>
 </html>
