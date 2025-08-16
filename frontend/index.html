@@ -14,9 +14,12 @@
       style="text-align:center; margin-top:2rem;"
     >
       <h1>SpotNet</h1>
-      <button class="button" id="login-btn">
-        Login with Spotify
-      </button>
+      <button class="button" id="login-btn">Login with Spotify</button>
+      <script type="module">
+        document.getElementById('login-btn')?.addEventListener('click', () => {
+          window.location.href = '/auth/login';
+        });
+      </script>
     </div>
 
     <script type="module" src="src/main.js"></script>

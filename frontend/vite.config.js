@@ -1,21 +1,26 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-  // during development, proxy API calls to Flask
   server: {
     port: 5173,
+    host: '127.0.0.1', 
     proxy: {
       '/api': {
-        target: 'http://localhost:5000',
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true,
-        rewrite: path => path.replace(/^\/api/, '')
-      }
-    }
+      },
+      '/auth': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
+      '/callback': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
+      '/data': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
+    },
   },
-  // build into `dist/`, nesting JS/CSS under `static/`
-  build: {
-    outDir: 'dist',
-    emptyOutDir: true,
-    assetsDir: 'static'
-  }
 });
