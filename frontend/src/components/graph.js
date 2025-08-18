@@ -13,8 +13,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-const EDGE_CAP = 1500000;
-const SEG_CAP = 200000000;
+const EDGE_CAP = 15000000;
+const SEG_CAP = 2000000000;
 const SPHERE_RADIUS = 10;
 const EDGE_COLOR = 0x888888;
 const EDGE_OPACITY = 0.15;
@@ -46,7 +46,6 @@ let UI_LOADING_OVERLAY = null;
 let UI_LOADING_STATUS = null;
 let UI_PROCEED_BTN = null;
 
-// --- GLOBAL VARIABLES ---
 let userPlaylists = [];
 let selectedPlaylistArtists = [];
 let graphData = { nodes: [], links: [] };

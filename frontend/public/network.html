@@ -2,100 +2,92 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>3D Graph Page</title>
-  <style>
-    body {
-      margin: 0;
-      overflow: hidden;
-      font-family: system-ui, sans-serif;
-      background-color: #000;
-    }
-    #3d-graph {
-      width: 100vw;
-      height: 100vh;
-    }
-    #ui {
-      position: fixed; top: 12px; left: 12px; z-index: 20;
-      display: flex; gap: 8px; align-items: center;
-      background: rgba(0,0,0,0.55); color: #fff;
-      padding: 8px 10px; border-radius: 8px; backdrop-filter: blur(4px);
-    }
-    #searchInput {
-      width: 260px; padding: 6px 8px; border-radius: 6px; border: none; outline: none;
-    }
-    #searchBtn, #proceed-btn, #loadPlaylistsBtn, #highlightAllBtn {
-      padding: 6px 10px; border: none; border-radius: 6px; cursor: pointer;
-      background-color: #2ca02c; color: #fff; font-weight: bold;
-    }
-    #searchStatus { font-size: 12px; opacity: 0.9; }
-
-    #loading-overlay {
-      position: fixed;
-      top: 0; left: 0; z-index: 100;
-      width: 100vw; height: 100vh;
-      background: rgba(15, 15, 15, 0.98);
-      color: #e0e0e0;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      text-align: center;
-      backdrop-filter: blur(8px);
-      transition: opacity 0.75s ease;
-    }
-    #loading-content {
-      max-width: 650px;
-      padding: 20px;
-    }
-    #loading-content h2 {
-      color: #fff;
-      font-size: 2rem;
-    }
-    #loading-content p {
-      font-size: 1.1rem;
-      line-height: 1.6;
-      opacity: 0.9;
-    }
-    #loading-status {
-      margin-top: 2rem;
-      font-style: italic;
-      color: #999;
-    }
-    #proceed-btn {
-      margin-top: 1.5rem;
-      padding: 12px 24px;
-      font-size: 1.2rem;
-    }
-  </style>
+  <title>Spotify Collaboration Network</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/src/assets/styles.css" />
 </head>
-<body>
-  <div id="3d-graph"></div>
+<body class="app-root">
+  <header class="app-bar">
+    <div class="app-bar__left">
+      <button id="drawerToggle" class="icon-btn" aria-label="Open sidebar" title="Open sidebar">
+        <span class="icon-bars"></span>
+      </button>
+      <h1 class="app-title">Spotify Collaboration Network</h1>
+    </div>
 
-  <div id="ui" style="display: none;">
-    <input id="searchInput" type="text" placeholder="Search artist by exact name…" />
-    <button id="searchBtn">Search</button>
-    <span id="searchStatus"></span>
+    <div id="ui" class="toolbar-controls" style="display: none;">
+      <div class="search-group">
+        <input id="searchInput" type="text" placeholder="Search artist by exact name…" />
+        <button id="searchBtn" class="btn btn--primary">Search</button>
+      </div>
 
-    <button id="loadPlaylistsBtn" title="Load your Spotify playlists">Load Playlists</button>
-    <select id="playlistDropdown" style="display: none; max-width: 200px; padding: 6px; border-radius: 6px;">
-      <option value="">-- Select a Playlist --</option>
-    </select>
-    <button id="highlightAllBtn" title="Highlight all artists from all your playlists" style="display: none; background-color: #1f77b4;">Highlight My Artists</button>
-  </div>
+      <div class="divider"></div>
+
+      <div class="playlist-group">
+        <button id="loadPlaylistsBtn" class="btn">Load Playlists</button>
+        <select id="playlistDropdown" class="select">
+          <option value="" disabled selected>Select a playlist…</option>
+        </select>
+        <button id="highlightAllBtn" class="btn">Highlight My Artists</button>
+      </div>
+
+      <div id="searchStatus" class="status-text" aria-live="polite"></div>
+    </div>
+  </header>
+
+  <aside id="drawer" class="drawer" aria-hidden="true">
+    <div class="drawer__header">
+      <h2 class="drawer__title">Panel</h2>
+      <button id="drawerClose" class="icon-btn" aria-label="Close sidebar" title="Close sidebar">
+        <span class="icon-close"></span>
+      </button>
+    </div>
+
+    <div class="drawer__content">
+      <section class="card">
+        <button class="card__toggle" type="button" aria-expanded="false" aria-controls="statsBody">
+          <span class="card__title">Stats</span>
+          <span class="chevron"></span>
+        </button>
+        <div id="statsBody" class="card__body" hidden>
+          <dl class="stats">
+            <div class="stats__row">
+              <dt>Nodes</dt><dd id="statNodes">–</dd>
+            </div>
+            <div class="stats__row">
+              <dt>Edges</dt><dd id="statEdges">–</dd>
+            </div>
+            <div class="stats__row">
+              <dt>Communities (top-K)</dt><dd id="statTopK">–</dd>
+            </div>
+          </dl>
+          <p class="muted">Stats populate after data loads and you click “Enter Visualization”.</p>
+        </div>
+      </section>
+    </div>
+  </aside>
+
+  <main class="canvas-wrap">
+    <div id="3d-graph"></div>
+  </main>
+
+  <div id="drawerBackdrop" class="backdrop" hidden></div>
 
   <div id="loading-overlay">
     <div id="loading-content">
       <h2>Spotify Collaboration Network</h2>
       <p>
-        This is Spotify's collaboration network. In this visualization, each sphere <strong>(node)</strong> represents an artist. An edge <strong>(line)</strong> between two artists indicates that they have collaborated on one or more songs together.
+        This is Spotify's collaboration network. In this visualization, each node represents an artist, and each edge indicates that they have collaborated on one or more songs together.
       </p>
       <p>
-        <strong>Controls:</strong> Click and drag to rotate, right-click/alt-click and drag to pan, and scroll to zoom. Click on any node to identify the artist.
+        <strong>Controls:</strong> Click and drag to rotate, right-click and drag to pan, and scroll to zoom. Click on any node to identify the artist.
       </p>
-      <div id="loading-status">Loading network data... </div>
-      <button id="proceed-btn" style="display: none;">Enter Visualization</button>
+      <div id="loading-status">Loading network data…</div>
+      <button id="proceed-btn" class="btn btn--primary" style="display: none;">Enter Visualization</button>
     </div>
   </div>
 
   <script type="module" src="/src/components/graph.js"></script>
+  <script type="module" src="/src/components/ui.js"></script>
 </body>
 </html>

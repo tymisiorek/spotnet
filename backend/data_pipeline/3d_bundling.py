@@ -17,16 +17,16 @@ This file was built pretty heavily using NotebookLM and Claude as the edge bundl
 '''
 
 
-NUM_ITERATIONS = 10
-INITIAL_BANDWIDTH_HMAX = 0.08
-KERNEL_REDUCTION_LAMBDA = 0.7
+NUM_ITERATIONS = 15
+INITIAL_BANDWIDTH_HMAX = 0.099
+KERNEL_REDUCTION_LAMBDA = 0.8
 # Prevent edges from moving if the density gradient nears zero
-EPSILON_GRADIENT = 1e-5
+EPSILON_GRADIENT = 1e-6
 # Reduce jaggedness
 SMOOTHING_ITERATIONS = 4
 # Resolution of grid to calculate density
-GRID_N = 80
-TEST_SIZE = 15000
+GRID_N = 90
+TEST_SIZE = 1500
 SAMPLES_PER_EDGE = 15
 # Prevents edges from being attracted to their own density
 SELF_AVOIDANCE_BATCHES = 4
