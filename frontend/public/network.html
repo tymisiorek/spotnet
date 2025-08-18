@@ -75,8 +75,10 @@
     <button id="searchBtn">Search</button>
     <span id="searchStatus"></span>
 
-    <button id="getPlaylistsBtn" title="Load your Spotify playlists">Load Playlists</button>
-    <div id="playlistContainer" style="display: inline-block;"></div>
+    <button id="loadPlaylistsBtn" title="Load your Spotify playlists">Load Playlists</button>
+    <select id="playlistDropdown" style="display: none; max-width: 200px; padding: 6px; border-radius: 6px;">
+      <option value="">-- Select a Playlist --</option>
+</select>
   </div>
 
   <div id="loading-overlay">

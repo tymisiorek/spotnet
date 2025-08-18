@@ -47,6 +47,8 @@ let UI_LOADING_OVERLAY = null;
 let UI_LOADING_STATUS = null;
 let UI_PROCEED_BTN = null;
 
+let selectedPlaylistArtists = [];
+
 
 document.addEventListener('DOMContentLoaded', () => {
     const el = document.getElementById('3d-graph');
@@ -473,40 +475,96 @@ function computeBBox(nodes) {
 }
 
 
-getPlaylistsBtn.addEventListener('click', async () => {
-    const originalText = getPlaylistsBtn.textContent;
-    getPlaylistsBtn.textContent = 'Loading...';
-    getPlaylistsBtn.disabled = true;
-    playlistContainer.innerHTML = ''; // Clear previous results
+// --- NEW SPOTIFY PLAYLIST LOGIC ---
+
+// Get references to the new UI elements
+const loadPlaylistsBtn = document.getElementById('loadPlaylistsBtn');
+const playlistDropdown = document.getElementById('playlistDropdown');
+
+// 1. Event listener for the "Load Playlists" button
+loadPlaylistsBtn.addEventListener('click', async () => {
+    const originalText = loadPlaylistsBtn.textContent;
+    loadPlaylistsBtn.textContent = 'Loading...';
+    loadPlaylistsBtn.disabled = true;
+    setStatus('Fetching playlists...');
 
     try {
-        const response = await fetch(`${BACKEND_BASE}/api/playlists`, { 
-            credentials: 'include',
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json'
-            }
+        const response = await fetch(`${BACKEND_BASE}/api/playlists`, {
+            credentials: 'include', // Important for sending session cookies
         });
 
         if (!response.ok) {
             if (response.status === 401) {
-                // User needs to authenticate
-                const shouldLogin = confirm('You need to log in with Spotify to load playlists. Would you like to log in now?');
-                if (shouldLogin) {
+                // If not authenticated, prompt the user to log in
+                if (confirm('You need to log in with Spotify to continue. Log in now?')) {
                     window.location.href = '/auth/login';
-                    return;
                 }
-                playlistContainer.innerHTML = '<span style="color: #ffd1d1;">Authentication required</span>';
             } else {
-                throw new Error(`Server responded with status: ${response.status}`);
+                throw new Error(`Server error: ${response.status}`);
             }
+            setStatus('Authentication required.', false);
             return;
         }
+
+        const playlists = await response.json();
+
+        // Clear previous options except for the first one
+        playlistDropdown.innerHTML = '<option value="">-- Select a Playlist --</option>';
+
+        // Populate the dropdown with the fetched playlists
+        playlists.forEach(playlist => {
+            const option = document.createElement('option');
+            option.value = playlist.id;
+            option.textContent = playlist.name;
+            playlistDropdown.appendChild(option);
+        });
+
+        // Show the dropdown and hide the load button for a cleaner UI
+        playlistDropdown.style.display = 'inline-block';
+        loadPlaylistsBtn.style.display = 'none';
+        setStatus('Playlists loaded.', true);
+
     } catch (error) {
         console.error('Failed to fetch playlists:', error);
-        playlistContainer.innerHTML = '<span style="color: #ffd1d1;">Error loading playlists</span>';
+        setStatus('Error loading playlists.', false);
     } finally {
-        getPlaylistsBtn.textContent = originalText;
-        getPlaylistsBtn.disabled = false;
+        loadPlaylistsBtn.textContent = originalText;
+        loadPlaylistsBtn.disabled = false;
+    }
+});
+
+// 2. Event listener for when a playlist is selected from the dropdown
+playlistDropdown.addEventListener('change', async (event) => {
+    const playlistId = event.target.value;
+
+    // Do nothing if the placeholder is selected
+    if (!playlistId) {
+        selectedPlaylistArtists = []; // Clear the variable if they deselect
+        return;
+    }
+
+    setStatus(`Fetching artists for playlist...`);
+
+    try {
+        const response = await fetch(`${BACKEND_BASE}/api/playlist/${playlistId}/artists`, {
+            credentials: 'include',
+        });
+
+        if (!response.ok) {
+            throw new Error(`Server error: ${response.status}`);
+        }
+
+        const artists = await response.json();
+        
+        // Save the result to the global variable
+        selectedPlaylistArtists = artists;
+
+        setStatus(`Loaded ${artists.length} unique artists.`, true);
+        console.log('Artists for selected playlist:', selectedPlaylistArtists);
+        
+    } catch (error) {
+        console.error('Failed to fetch artists:', error);
+        setStatus('Error fetching artists.', false);
+        selectedPlaylistArtists = []; // Clear on error
     }
 });

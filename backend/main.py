@@ -223,7 +223,7 @@ def get_user_playlists():
 
     try:
         print("Fetching Playlists")
-        results = sp.current_user_playlists(limit=100)
+        results = sp.current_user_playlists(limit=50)
         playlists = []
         for item in results['items']:
             playlists.append({
@@ -240,6 +240,60 @@ def get_user_playlists():
         return jsonify(error=f"Spotify API error: {str(e)}"), 500
     except Exception as e:
         print(f"Unexpected error: {e}")
+        return jsonify(error=str(e)), 500
+    
+
+@app.route("/api/playlist/<string:playlist_id>/artists")
+def get_playlist_artists(playlist_id):
+    """
+    Fetch all unique artists from a specific playlist ID.
+    """
+    print(f"Fetching unique artists for playlist: {playlist_id}")
+    sp = get_spotify_client()
+    if not sp:
+        print("User not authenticated")
+        return jsonify(error="User not authenticated"), 401
+
+    try:
+        unique_artists = []
+        seen_artist_ids = set() # Use a set for efficient duplicate checking
+
+        # Fetch the playlist items (tracks) page by page
+        results = sp.playlist_items(playlist_id)
+        
+        while results:
+            for item in results['items']:
+                track = item.get('track')
+                # A track might not have artists, so we check
+                if track and track.get('artists'):
+                    # Iterate through each artist credited on the track
+                    for artist in track['artists']:
+                        # If we haven't seen this artist ID before, add them
+                        if artist['id'] and artist['id'] not in seen_artist_ids:
+                            seen_artist_ids.add(artist['id'])
+                            unique_artists.append({
+                                'id': artist['id'],
+                                'name': artist['name']
+                            })
+            
+            # Get the next page of tracks, if it exists
+            if results['next']:
+                results = sp.next(results)
+            else:
+                results = None # Exit the loop
+
+        print(f"Successfully fetched {len(unique_artists)} unique artists for playlist {playlist_id}")
+        return jsonify(unique_artists)
+
+    except spotipy.exceptions.SpotifyException as e:
+        print(f"Spotify API error for playlist {playlist_id}: {e}")
+        if e.http_status == 404:
+            return jsonify(error="Playlist not found"), 404
+        if e.http_status == 401:
+            return jsonify(error="Token invalid or expired"), 401
+        return jsonify(error=f"Spotify API error: {str(e)}"), 500
+    except Exception as e:
+        print(f"Unexpected error for playlist {playlist_id}: {e}")
         return jsonify(error=str(e)), 500
     
 if __name__ == "__main__":
