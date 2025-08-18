@@ -19,7 +19,6 @@ const SPHERE_RADIUS = 10;
 const EDGE_COLOR = 0x888888;
 const EDGE_OPACITY = 0.15;
 
-// Right now only have the first 20 communities, but everything should be colored later on
 const PALETTE = [
     0x1f77b4, 0xff7f0e, 0x2ca02c, 0xd62728, 0x9467bd,
     0x8c564b, 0xe377c2, 0x7f7f7f, 0xbcbd22, 0x17becf,
@@ -47,8 +46,12 @@ let UI_LOADING_OVERLAY = null;
 let UI_LOADING_STATUS = null;
 let UI_PROCEED_BTN = null;
 
+// --- GLOBAL VARIABLES ---
+let userPlaylists = [];
 let selectedPlaylistArtists = [];
-
+let graphData = { nodes: [], links: [] };
+let originalNodeLODs = []; // To store references to the original node objects
+let highlightObjects = []; // To store the highlight layers
 
 document.addEventListener('DOMContentLoaded', () => {
     const el = document.getElementById('3d-graph');
@@ -62,7 +65,8 @@ document.addEventListener('DOMContentLoaded', () => {
     UI_LOADING_STATUS = document.getElementById('loading-status');
     UI_PROCEED_BTN = document.getElementById('proceed-btn');
 
-    const fg = ForceGraph3D({
+    // Make the graph instance globally accessible
+    window.theGraph = ForceGraph3D({
         rendererConfig: {
             antialias: true, 
             powerPreference: 'high-performance',
@@ -76,17 +80,17 @@ document.addEventListener('DOMContentLoaded', () => {
         .enableNodeDrag(false)
         .linkVisibility(() => false); //draw manually
 
-    fg.scene().add(new THREE.AmbientLight(0xffffff, 0.7));
+    window.theGraph.scene().add(new THREE.AmbientLight(0xffffff, 0.7));
     const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
     dirLight.position.set(1, 1, 1).normalize();
-    fg.scene().add(dirLight);
+    window.theGraph.scene().add(dirLight);
 
-    const cam = fg.camera();
+    const cam = window.theGraph.camera();
     cam.near = 0.1;
     cam.far = 1e9;
     cam.updateProjectionMatrix();
 
-    const controls = fg.controls();
+    const controls = window.theGraph.controls();
     Object.assign(controls, {
         screenSpacePanning: false,
         minDistance: 100,
@@ -102,13 +106,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     let lastControlUpdate = 0;
-    //60 fps
     const CONTROL_UPDATE_INTERVAL = 16; 
     controls.addEventListener('change', () => {
         const now = performance.now();
         if (now - lastControlUpdate > CONTROL_UPDATE_INTERVAL) {
             lastControlUpdate = now;
-            if (ACTIVE_HIT) updateTooltipPosition(fg, cam);
+            if (ACTIVE_HIT) updateTooltipPosition(window.theGraph, cam);
         }
     });
 
@@ -116,7 +119,7 @@ document.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
         const q = (UI_INPUT?.value ?? '').trim();
         if (!q) { setStatus(''); return; }
-        focusNodeByName(q, fg, cam, controls);
+        focusNodeByName(q, window.theGraph, cam, controls);
     });
     UI_INPUT?.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
@@ -126,7 +129,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     ensureTooltip(el);
-    ensureHighlightMesh(fg.scene());
+    ensureHighlightMesh(window.theGraph.scene());
 
     // Get graph data
     const url = `${BACKEND_BASE}/data/graph?_cb=${Date.now()}`;
@@ -140,6 +143,8 @@ document.addEventListener('DOMContentLoaded', () => {
             UI_LOADING_STATUS.textContent = 'Building visualization';
 
             let { nodes, links } = data;
+            graphData = { nodes, links };
+
             if (EDGE_CAP != null && links.length > EDGE_CAP) {
                 links = links.slice(0, EDGE_CAP);
             }
@@ -158,19 +163,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 .slice(0, TOP_K)
                 .map(([id]) => +id);
 
-            setupInstancedNodes(fg, nodes, topCommunities);
+            setupInstancedNodes(window.theGraph, nodes, topCommunities);
             NAME_INDEX = buildNameIndex(nodes);
-            fg.graphData({ nodes, links });
-            addOptimizedBundledEdges(fg.scene(), links);
+            window.theGraph.graphData({ nodes, links });
+            addOptimizedBundledEdges(window.theGraph.scene(), links);
 
             const { center, diag } = computeBBox(nodes);
             controls.target.set(center.x, center.y, center.z);
             cam.position.set(center.x, center.y, center.z + diag * 0.8);
             cam.updateProjectionMatrix();
 
-            installPicking(fg, cam);
+            installPicking(window.theGraph, cam);
 
-            // Now show proceed
             UI_LOADING_STATUS.style.display = 'none';
             UI_PROCEED_BTN.style.display = 'inline-block';
 
@@ -190,7 +194,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 });
 
-// Instance nodes for performance
 function setupInstancedNodes(fg, nodes, topCommunities) {
     const sphereGeoHigh = new THREE.SphereGeometry(SPHERE_RADIUS, 8, 8);
     const sphereGeoMed = new THREE.SphereGeometry(SPHERE_RADIUS, 6, 6);
@@ -205,18 +208,11 @@ function setupInstancedNodes(fg, nodes, topCommunities) {
     });
 
     Object.entries(nodesByColor).forEach(([color, colorNodes]) => {
-
-        const material = new THREE.MeshStandardMaterial({
-            color: +color,
-            metalness: 0.3,
-            roughness: 0.6
-        });
-
+        const material = new THREE.MeshStandardMaterial({ color: +color, metalness: 0.3, roughness: 0.6 });
         const lod = new THREE.LOD();
         const instancedHigh = new THREE.InstancedMesh(sphereGeoHigh, material, colorNodes.length);
         const instancedMed = new THREE.InstancedMesh(sphereGeoMed, material, colorNodes.length);
         const instancedLow = new THREE.InstancedMesh(sphereGeoLow, material, colorNodes.length);
-
         const m = new THREE.Matrix4();
         colorNodes.forEach((node, i) => {
             m.setPosition(node.x, node.y, node.z || 0);
@@ -227,24 +223,20 @@ function setupInstancedNodes(fg, nodes, topCommunities) {
         instancedHigh.instanceMatrix.needsUpdate = true;
         instancedMed.instanceMatrix.needsUpdate = true;
         instancedLow.instanceMatrix.needsUpdate = true;
-
         instancedHigh.userData.nodes = colorNodes;
         instancedMed.userData.nodes = colorNodes;
         instancedLow.userData.nodes = colorNodes;
-
         PICKABLE_MESHES.push(instancedHigh, instancedMed, instancedLow);
-
         lod.addLevel(instancedHigh, LOD_DISTANCES.high);
         lod.addLevel(instancedMed, LOD_DISTANCES.medium);
         lod.addLevel(instancedLow, LOD_DISTANCES.low);
-
+        originalNodeLODs.push(lod);
         fg.scene().add(lod);
     });
 
     fg.nodeThreeObject(() => new THREE.Object3D());
 }
 
-// Should cull edges if they are far enough so everything is not loaded at once
 function addOptimizedBundledEdges(scene, links) {
     let segCount = 0;
     for (const e of links) {
@@ -269,27 +261,16 @@ function addOptimizedBundledEdges(scene, links) {
     }
 
     const geom = new THREE.BufferGeometry();
-    geom.setAttribute('position',
-        new THREE.BufferAttribute(
-            w === positions.length ? positions : positions.slice(0, w), 3
-        ));
+    geom.setAttribute('position', new THREE.BufferAttribute(w === positions.length ? positions : positions.slice(0, w), 3));
     geom.computeBoundingSphere();
 
-    const mat = new THREE.LineBasicMaterial({
-        color: EDGE_COLOR,
-        transparent: true,
-        opacity: EDGE_OPACITY,
-        vertexColors: false
-    });
-
+    const mat = new THREE.LineBasicMaterial({ color: EDGE_COLOR, transparent: true, opacity: EDGE_OPACITY, vertexColors: false });
     const lines = new THREE.LineSegments(geom, mat);
     lines.frustumCulled = true;
     lines.userData.__graphObject = true;
-
     scene.add(lines);
 }
 
-// Able to click nodes and see information without huge amounts of performance hit
 function installPicking(fg, cam) {
     const canvas = fg.renderer().domElement;
     const raycaster = new THREE.Raycaster();
@@ -326,24 +307,15 @@ function ensureTooltip(containerEl) {
     if (TOOLTIP_EL) return;
     TOOLTIP_EL = document.createElement('div');
     Object.assign(TOOLTIP_EL.style, {
-        position: 'absolute',
-        pointerEvents: 'none',
-        transform: 'translate(-50%, -120%)',
-        padding: '6px 8px',
-        font: '12px/1.2 system-ui, sans-serif',
-        background: 'rgba(0,0,0,0.75)',
-        color: '#fff',
-        borderRadius: '6px',
-        whiteSpace: 'nowrap',
-        display: 'none',
-        zIndex: 10
+        position: 'absolute', pointerEvents: 'none', transform: 'translate(-50%, -120%)',
+        padding: '6px 8px', font: '12px/1.2 system-ui, sans-serif', background: 'rgba(0,0,0,0.75)',
+        color: '#fff', borderRadius: '6px', whiteSpace: 'nowrap', display: 'none', zIndex: 10
     });
     containerEl.appendChild(TOOLTIP_EL);
 }
 
 function ensureHighlightMesh(scene) {
     if (HIGHLIGHT_MESH) return;
-    //Increased segments for the highlighted sphere
     const geom = new THREE.SphereGeometry(SPHERE_RADIUS * 1.7, 32, 32);
     const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true, depthTest: false, transparent: true, opacity: 0.9 });
     HIGHLIGHT_MESH = new THREE.Mesh(geom, mat);
@@ -391,7 +363,6 @@ function updateTooltipPosition(fg, cam) {
     TOOLTIP_EL.style.top = `${(-p.y * halfH) + halfH}px`;
 }
 
-// Search function stuff - should switch to some non-exact matching later
 function buildNameIndex(nodes) {
     const idx = new Map();
     for (const n of nodes) {
@@ -451,37 +422,24 @@ function parsePoints(p) {
 }
 
 function computeBBox(nodes) {
-    let minX = Infinity, maxX = -Infinity,
-        minY = Infinity, maxY = -Infinity,
-        minZ = Infinity, maxZ = -Infinity;
-
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
     nodes.forEach(n => {
-        if (n.x < minX) minX = n.x;
-        if (n.x > maxX) maxX = n.x;
-        if (n.y < minY) minY = n.y;
-        if (n.y > maxY) maxY = n.y;
-        if (n.z < minZ) minZ = n.z;
-        if (n.z > maxZ) maxZ = n.z;
+        if (n.x < minX) minX = n.x; if (n.x > maxX) maxX = n.x;
+        if (n.y < minY) minY = n.y; if (n.y > maxY) maxY = n.y;
+        if (n.z < minZ) minZ = n.z; if (n.z > maxZ) maxZ = n.z;
     });
-
-    const center = {
-        x: (minX + maxX) / 2,
-        y: (minY + maxY) / 2,
-        z: (minZ + maxZ) / 2
-    };
+    const center = { x: (minX + maxX) / 2, y: (minY + maxY) / 2, z: (minZ + maxZ) / 2 };
     const dx = maxX - minX, dy = maxY - minY, dz = maxZ - minZ;
     const diag = Math.sqrt(dx * dx + dy * dy + dz * dz);
     return { center, diag };
 }
 
+// --- SPOTIFY PLAYLIST LOGIC ---
 
-// --- NEW SPOTIFY PLAYLIST LOGIC ---
-
-// Get references to the new UI elements
 const loadPlaylistsBtn = document.getElementById('loadPlaylistsBtn');
 const playlistDropdown = document.getElementById('playlistDropdown');
+const highlightAllBtn = document.getElementById('highlightAllBtn');
 
-// 1. Event listener for the "Load Playlists" button
 loadPlaylistsBtn.addEventListener('click', async () => {
     const originalText = loadPlaylistsBtn.textContent;
     loadPlaylistsBtn.textContent = 'Loading...';
@@ -489,29 +447,20 @@ loadPlaylistsBtn.addEventListener('click', async () => {
     setStatus('Fetching playlists...');
 
     try {
-        const response = await fetch(`${BACKEND_BASE}/api/playlists`, {
-            credentials: 'include', // Important for sending session cookies
-        });
-
+        const response = await fetch(`${BACKEND_BASE}/api/playlists`, { credentials: 'include' });
         if (!response.ok) {
             if (response.status === 401) {
-                // If not authenticated, prompt the user to log in
                 if (confirm('You need to log in with Spotify to continue. Log in now?')) {
                     window.location.href = '/auth/login';
                 }
-            } else {
-                throw new Error(`Server error: ${response.status}`);
-            }
+            } else { throw new Error(`Server error: ${response.status}`); }
             setStatus('Authentication required.', false);
             return;
         }
-
         const playlists = await response.json();
+        userPlaylists = playlists; // Store playlists for later use
 
-        // Clear previous options except for the first one
         playlistDropdown.innerHTML = '<option value="">-- Select a Playlist --</option>';
-
-        // Populate the dropdown with the fetched playlists
         playlists.forEach(playlist => {
             const option = document.createElement('option');
             option.value = playlist.id;
@@ -519,11 +468,10 @@ loadPlaylistsBtn.addEventListener('click', async () => {
             playlistDropdown.appendChild(option);
         });
 
-        // Show the dropdown and hide the load button for a cleaner UI
         playlistDropdown.style.display = 'inline-block';
+        highlightAllBtn.style.display = 'inline-block'; // Show the new button
         loadPlaylistsBtn.style.display = 'none';
         setStatus('Playlists loaded.', true);
-
     } catch (error) {
         console.error('Failed to fetch playlists:', error);
         setStatus('Error loading playlists.', false);
@@ -533,38 +481,150 @@ loadPlaylistsBtn.addEventListener('click', async () => {
     }
 });
 
-// 2. Event listener for when a playlist is selected from the dropdown
 playlistDropdown.addEventListener('change', async (event) => {
     const playlistId = event.target.value;
+    const fg = window.theGraph;
 
-    // Do nothing if the placeholder is selected
     if (!playlistId) {
-        selectedPlaylistArtists = []; // Clear the variable if they deselect
+        selectedPlaylistArtists = [];
+        if (fg) resetHighlights(fg);
+        setStatus('');
+        return;
+    }
+    setStatus(`Fetching artists for playlist...`);
+    try {
+        const response = await fetch(`${BACKEND_BASE}/api/playlist/${playlistId}/artists`, { credentials: 'include' });
+        if (!response.ok) throw new Error(`Server error: ${response.status}`);
+        const artists = await response.json();
+        selectedPlaylistArtists = artists;
+        const artistIds = artists.map(artist => artist.id);
+        if (fg) highlightArtistsInGraph(artistIds, fg);
+        setStatus(`Highlighted ${artistIds.length} artists.`, true);
+        console.log('Highlighted artists for selected playlist:', selectedPlaylistArtists);
+    } catch (error) {
+        console.error('Failed to fetch or highlight artists:', error);
+        setStatus('Error highlighting artists.', false);
+        selectedPlaylistArtists = [];
+        if (fg) resetHighlights(fg);
+    }
+});
+
+highlightAllBtn.addEventListener('click', async () => {
+    const fg = window.theGraph;
+    if (!userPlaylists || userPlaylists.length === 0) {
+        setStatus('Please load playlists first.', false);
         return;
     }
 
-    setStatus(`Fetching artists for playlist...`);
+    highlightAllBtn.disabled = true;
+    playlistDropdown.disabled = true;
+    setStatus(`Fetching artists from ${userPlaylists.length} playlists...`);
 
     try {
-        const response = await fetch(`${BACKEND_BASE}/api/playlist/${playlistId}/artists`, {
-            credentials: 'include',
+        const fetchPromises = userPlaylists.map(playlist =>
+            fetch(`${BACKEND_BASE}/api/playlist/${playlist.id}/artists`, { credentials: 'include' })
+                .then(res => {
+                    if (!res.ok) console.error(`Failed to fetch artists for ${playlist.name}`);
+                    return res.ok ? res.json() : [];
+                })
+        );
+        const artistArrays = await Promise.all(fetchPromises);
+
+        const uniqueArtistsMap = new Map();
+        artistArrays.flat().forEach(artist => {
+            if (artist && artist.id && !uniqueArtistsMap.has(artist.id)) {
+                uniqueArtistsMap.set(artist.id, artist);
+            }
         });
+        const allUniqueArtists = Array.from(uniqueArtistsMap.values());
+        const allArtistIds = allUniqueArtists.map(artist => artist.id);
 
-        if (!response.ok) {
-            throw new Error(`Server error: ${response.status}`);
-        }
-
-        const artists = await response.json();
-        
-        // Save the result to the global variable
-        selectedPlaylistArtists = artists;
-
-        setStatus(`Loaded ${artists.length} unique artists.`, true);
-        console.log('Artists for selected playlist:', selectedPlaylistArtists);
-        
+        if (fg) highlightArtistsInGraph(allArtistIds, fg);
+        setStatus(`Highlighted ${allArtistIds.length} total unique artists.`, true);
+        console.log(`Found ${allArtistIds.length} total unique artists across all playlists.`);
     } catch (error) {
-        console.error('Failed to fetch artists:', error);
-        setStatus('Error fetching artists.', false);
-        selectedPlaylistArtists = []; // Clear on error
+        console.error('Failed to fetch and highlight all artists:', error);
+        setStatus('An error occurred while highlighting all artists.', false);
+        if (fg) resetHighlights(fg);
+    } finally {
+        highlightAllBtn.disabled = false;
+        playlistDropdown.disabled = false;
     }
 });
+
+
+// --- HIGHLIGHTING FUNCTIONS ---
+
+function resetHighlights(fg) {
+    highlightObjects.forEach(obj => {
+        if(obj.geometry) obj.geometry.dispose();
+        if(obj.material) obj.material.dispose();
+        fg.scene().remove(obj);
+    });
+    highlightObjects = [];
+    originalNodeLODs.forEach(lod => lod.visible = true);
+}
+
+function highlightArtistsInGraph(artistIds, fg) {
+    resetHighlights(fg);
+    if (!artistIds || artistIds.length === 0) return;
+
+    const artistIdSet = new Set(artistIds);
+    const matchedNodes = [], unmatchedNodes = [];
+    graphData.nodes.forEach(node => {
+        if (artistIdSet.has(node.id)) matchedNodes.push(node);
+        else unmatchedNodes.push(node);
+    });
+    const highlightedLinks = graphData.links.filter(link =>
+        artistIdSet.has(link.source.id || link.source) && artistIdSet.has(link.target.id || link.target)
+    );
+
+    originalNodeLODs.forEach(lod => lod.visible = false);
+
+    const sphereGeo = new THREE.SphereGeometry(SPHERE_RADIUS, 5, 5);
+    const dimMaterial = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.1, roughness: 0.8 });
+    const unmatchedMesh = new THREE.InstancedMesh(sphereGeo.clone(), dimMaterial, unmatchedNodes.length);
+    const m = new THREE.Matrix4();
+    unmatchedNodes.forEach((node, i) => {
+        m.setPosition(node.x, node.y, node.z || 0);
+        unmatchedMesh.setMatrixAt(i, m);
+    });
+    unmatchedMesh.instanceMatrix.needsUpdate = true;
+    fg.scene().add(unmatchedMesh);
+    highlightObjects.push(unmatchedMesh);
+
+    const highlightMaterial = new THREE.MeshStandardMaterial({ color: 0xffff00, metalness: 0.3, roughness: 0.4, emissive: 0x333300 });
+    const matchedMesh = new THREE.InstancedMesh(sphereGeo.clone(), highlightMaterial, matchedNodes.length);
+    matchedNodes.forEach((node, i) => {
+        m.setPosition(node.x, node.y, node.z || 0);
+        matchedMesh.setMatrixAt(i, m);
+    });
+    matchedMesh.instanceMatrix.needsUpdate = true;
+    fg.scene().add(matchedMesh);
+    highlightObjects.push(matchedMesh);
+
+    if (highlightedLinks.length > 0) {
+        const highlightedEdgeMaterial = new THREE.LineBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0.5 });
+        let segCount = 0;
+        highlightedLinks.forEach(e => {
+            const pts = parsePoints(e.points);
+            if (pts && pts.length > 1) segCount += pts.length - 1;
+        });
+        const positions = new Float32Array(segCount * 2 * 3);
+        let w = 0;
+        highlightedLinks.forEach(e => {
+            const pts = parsePoints(e.points);
+            if (!pts || pts.length < 2) return;
+            for (let i = 0; i < pts.length - 1; i++) {
+                positions[w] = pts[i].x; positions[w+1] = pts[i].y; positions[w+2] = pts[i].z;
+                positions[w+3] = pts[i+1].x; positions[w+4] = pts[i+1].y; positions[w+5] = pts[i+1].z;
+                w += 6;
+            }
+        });
+        const geom = new THREE.BufferGeometry();
+        geom.setAttribute('position', new THREE.BufferAttribute(positions.slice(0, w), 3));
+        const lines = new THREE.LineSegments(geom, highlightedEdgeMaterial);
+        fg.scene().add(lines);
+        highlightObjects.push(lines);
+    }
+}
