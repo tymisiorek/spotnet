@@ -4,7 +4,7 @@ A 3D visualization of Spotify's collaboration network where each node represents
 
 Need to add GCN + PPR recommender and smaller features
 
-## Network Visualization
+## Current Visualization
 <p float="left">
-  <img src="spotnet.png" width="65%" alt="i1" />
+  <img src="spotnet.png" width="90%" alt="i1" />
 </p>
