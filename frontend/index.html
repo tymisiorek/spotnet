@@ -1,13 +1,27 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Vite + React</title>
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0"
+    />
+    <title>SpotNet Login</title>
   </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
+  <body class="fade-in-on-load">
+    <div
+      class="container reveal"
+      style="text-align:center; margin-top:2rem;"
+    >
+      <h1>SpotNet</h1>
+      <button class="button" id="login-btn">Login with Spotify</button>
+      <script type="module">
+        document.getElementById('login-btn')?.addEventListener('click', () => {
+          window.location.href = '/auth/login';
+        });
+      </script>
+    </div>
+
+    <script type="module" src="src/main.js"></script>
   </body>
 </html>

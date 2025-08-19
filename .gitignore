@@ -1,6 +1,6 @@
 spotnet-venv/
-backend/app/.env
-
+backend/.env
+.env
 
 
 # Logs
@@ -27,3 +27,26 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+____pycache__/
+*.py[cod]
+instance/
+
+node_modules/
+frontend/node_modules/
+dist/
+frontend/dist/
+frontend/.vite/
+
+*.egg-info/
+pip-wheel-metadata/
+
+build/
+package-lock.json
+
+data/
+
+# Ignore any folder named 'cache' anywhere
+**/cache/
+.cache/
+*.cache
