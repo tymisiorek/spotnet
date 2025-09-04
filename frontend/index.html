@@ -1,27 +1,26 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0"
-    />
-    <title>SpotNet Login</title>
-  </head>
-  <body class="fade-in-on-load">
-    <div
-      class="container reveal"
-      style="text-align:center; margin-top:2rem;"
-    >
-      <h1>SpotNet</h1>
-      <button class="button" id="login-btn">Login with Spotify</button>
-      <script type="module">
-        document.getElementById('login-btn')?.addEventListener('click', () => {
-          window.location.href = '/auth/login';
-        });
-      </script>
+<head>
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0" />
+  <title>SpotNet</title>
+  <link rel="stylesheet" href="/src/assets/styles.css" />
+</head>
+<body>
+  <main class="landing-container">
+    <div class="login-card">
+      <h1 class="hero-title">SpotNet</h1>
+      <p class="hero-subtitle">
+        Visualize the network of musical collaborations on Spotify.
+      </p>
+      <button class="button" id="login-btn" type="button" aria-label="Login with Spotify">
+        Login with Spotify
+      </button>
     </div>
+  </main>
 
-    <script type="module" src="src/main.js"></script>
-  </body>
+  <script type="module" src="/src/main.js"></script>
+</body>
 </html>

@@ -13,11 +13,11 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-const EDGE_CAP = 15000000;
-const SEG_CAP = 2000000000;
-const SPHERE_RADIUS = 10;
+const EDGE_CAP = 5000;
+const SEG_CAP = 20000000;
+const SPHERE_RADIUS = 12;
 const EDGE_COLOR = 0x888888;
-const EDGE_OPACITY = 0.15;
+const EDGE_OPACITY = 0.1;
 
 const PALETTE = [
     0x1f77b4, 0xff7f0e, 0x2ca02c, 0xd62728, 0x9467bd,
@@ -41,7 +41,8 @@ let HIGHLIGHT_MESH = null;
 let UI_WRAPPER = null;
 let UI_INPUT = null;
 let UI_BTN = null;
-let UI_STATUS = null;
+let UI_STATUS = null; // This will now refer to the new notification element
+let statusTimeoutId = null; // Timer for hiding the status notification
 let UI_LOADING_OVERLAY = null;
 let UI_LOADING_STATUS = null;
 let UI_PROCEED_BTN = null;
@@ -59,7 +60,8 @@ document.addEventListener('DOMContentLoaded', () => {
     UI_WRAPPER = document.getElementById('ui');
     UI_INPUT = document.getElementById('searchInput');
     UI_BTN = document.getElementById('searchBtn');
-    UI_STATUS = document.getElementById('searchStatus');
+    // MODIFIED: Point UI_STATUS to the new notification element from network.html
+    UI_STATUS = document.getElementById('status-notification');
     UI_LOADING_OVERLAY = document.getElementById('loading-overlay');
     UI_LOADING_STATUS = document.getElementById('loading-status');
     UI_PROCEED_BTN = document.getElementById('proceed-btn');
@@ -117,7 +119,7 @@ document.addEventListener('DOMContentLoaded', () => {
     UI_BTN?.addEventListener('click', (e) => {
         e.preventDefault();
         const q = (UI_INPUT?.value ?? '').trim();
-        if (!q) { setStatus(''); return; }
+        if (!q) { return; }
         focusNodeByName(q, window.theGraph, cam, controls);
     });
     UI_INPUT?.addEventListener('keydown', (e) => {
@@ -183,6 +185,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     UI_LOADING_OVERLAY.style.display = 'none';
                 }, 750);
                 UI_WRAPPER.style.display = 'flex';
+                // MODIFIED: Automatically load playlists when user enters the visualization
+                loadPlaylists();
             });
 
         })
@@ -294,7 +298,7 @@ function installPicking(fg, cam) {
         if (node) {
             showTooltip(node, hit.point, fg, cam);
             highlightAt(node.x, node.y, node.z || 0);
-            setStatus(node?.name || '');
+            // We don't call setStatus on click anymore to avoid spamming notifications
         } else {
             hideTooltip();
             highlightOff();
@@ -378,8 +382,21 @@ function normalizeName(s) {
 
 function setStatus(msg, ok = true) {
     if (!UI_STATUS) return;
+
+    // Clear any existing timer to prevent the old message from hiding the new one
+    if (statusTimeoutId) {
+        clearTimeout(statusTimeoutId);
+    }
+
+    // Set message and apply styles
     UI_STATUS.textContent = msg;
-    UI_STATUS.style.color = ok ? '#d1ffd1' : '#ffd1d1';
+    UI_STATUS.className = 'status-notification'; // Reset classes
+    UI_STATUS.classList.add(ok ? 'success' : 'error');
+    UI_STATUS.classList.add('show');
+
+    statusTimeoutId = setTimeout(() => {
+        UI_STATUS.classList.remove('show');
+    }, 3500);
 }
 
 function focusNodeByName(rawName, fg, cam, controls) {
@@ -387,7 +404,7 @@ function focusNodeByName(rawName, fg, cam, controls) {
     const key = normalizeName(rawName);
     const node = NAME_INDEX.get(key);
     if (!node) {
-        setStatus('Not found', false);
+        setStatus('Artist not found', false);
         hideTooltip();
         highlightOff();
         return;
@@ -405,7 +422,7 @@ function focusNodeByName(rawName, fg, cam, controls) {
     showTooltip(node, target, fg, cam);
     highlightAt(target.x, target.y, target.z);
 
-    setStatus(node.name || '');
+    setStatus(`Focused on: ${node.name || ''}`, true);
 }
 
 function parsePoints(p) {
@@ -433,27 +450,24 @@ function computeBBox(nodes) {
     return { center, diag };
 }
 
-// --- SPOTIFY PLAYLIST LOGIC ---
 
-const loadPlaylistsBtn = document.getElementById('loadPlaylistsBtn');
-const playlistDropdown = document.getElementById('playlistDropdown');
-const highlightAllBtn = document.getElementById('highlightAllBtn');
+async function loadPlaylists() {
+    const playlistDropdown = document.getElementById('playlistDropdown');
+    const highlightAllBtn = document.getElementById('highlightAllBtn');
 
-loadPlaylistsBtn.addEventListener('click', async () => {
-    const originalText = loadPlaylistsBtn.textContent;
-    loadPlaylistsBtn.textContent = 'Loading...';
-    loadPlaylistsBtn.disabled = true;
-    setStatus('Fetching playlists...');
+    setStatus('Fetching your playlists...', true);
 
     try {
         const response = await fetch(`${BACKEND_BASE}/api/playlists`, { credentials: 'include' });
         if (!response.ok) {
             if (response.status === 401) {
-                if (confirm('You need to log in with Spotify to continue. Log in now?')) {
+                if (confirm('You need to log in with Spotify to load playlists. Log in now?')) {
                     window.location.href = '/auth/login';
                 }
             } else { throw new Error(`Server error: ${response.status}`); }
-            setStatus('Authentication required.', false);
+            setStatus('Authentication required to load playlists.', false);
+            playlistDropdown.innerHTML = `<option value="">Login to see playlists</option>`;
+            playlistDropdown.style.display = 'inline-block';
             return;
         }
         const playlists = await response.json();
@@ -468,17 +482,19 @@ loadPlaylistsBtn.addEventListener('click', async () => {
         });
 
         playlistDropdown.style.display = 'inline-block';
-        highlightAllBtn.style.display = 'inline-block'; // Show the new button
-        loadPlaylistsBtn.style.display = 'none';
-        setStatus('Playlists loaded.', true);
+        highlightAllBtn.style.display = 'inline-block';
+        setStatus('Playlists loaded successfully.', true);
     } catch (error) {
         console.error('Failed to fetch playlists:', error);
         setStatus('Error loading playlists.', false);
-    } finally {
-        loadPlaylistsBtn.textContent = originalText;
-        loadPlaylistsBtn.disabled = false;
+        playlistDropdown.innerHTML = `<option value="">Error loading playlists</option>`;
+        playlistDropdown.style.display = 'inline-block';
     }
-});
+}
+
+
+const playlistDropdown = document.getElementById('playlistDropdown');
+const highlightAllBtn = document.getElementById('highlightAllBtn');
 
 playlistDropdown.addEventListener('change', async (event) => {
     const playlistId = event.target.value;
@@ -487,10 +503,9 @@ playlistDropdown.addEventListener('change', async (event) => {
     if (!playlistId) {
         selectedPlaylistArtists = [];
         if (fg) resetHighlights(fg);
-        setStatus('');
         return;
     }
-    setStatus(`Fetching artists for playlist...`);
+    setStatus(`Fetching artists for playlist...`, true);
     try {
         const response = await fetch(`${BACKEND_BASE}/api/playlist/${playlistId}/artists`, { credentials: 'include' });
         if (!response.ok) throw new Error(`Server error: ${response.status}`);
@@ -517,7 +532,7 @@ highlightAllBtn.addEventListener('click', async () => {
 
     highlightAllBtn.disabled = true;
     playlistDropdown.disabled = true;
-    setStatus(`Fetching artists from ${userPlaylists.length} playlists...`);
+    setStatus(`Fetching artists from ${userPlaylists.length} playlists...`, true);
 
     try {
         const fetchPromises = userPlaylists.map(playlist =>

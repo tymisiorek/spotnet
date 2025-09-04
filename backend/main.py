@@ -156,11 +156,11 @@ def data_graph():
             })
 
     links = []
-    have_points = False
     with edges_csv.open(newline="", encoding="utf-8") as f:
         r = csv.DictReader(f)
         fields = r.fieldnames or []
         have_points = "points" in fields
+        have_weight = "weight" in fields
         count = 0
         for row in r:
             s, t = row.get("source"), row.get("target")
@@ -169,6 +169,11 @@ def data_graph():
             link = {"source": s, "target": t}
             if have_points:
                 link["points"] = row["points"]  # keep raw string for client to parse
+            if have_weight:
+                try:
+                    link["weight"] = int(row["weight"])
+                except (ValueError, TypeError):
+                    link["weight"] = 1
             links.append(link)
             count += 1
             if max_edges is not None and count >= max_edges:
@@ -180,9 +185,11 @@ def data_graph():
         "meta": {
             "node_count": len(nodes),
             "edge_count": len(links),
-            "bundled": have_points
+            "bundled": have_points,
+            "weighted": have_weight
         }
     })
+
 
 
 def get_spotify_client():

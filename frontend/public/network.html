@@ -24,16 +24,15 @@
       <div class="divider"></div>
 
       <div class="playlist-group">
-        <button id="loadPlaylistsBtn" class="btn">Load Playlists</button>
-        <select id="playlistDropdown" class="select">
-          <option value="" disabled selected>Select a playlist…</option>
+        <select id="playlistDropdown" class="select" style="display: none;">
+          <option value="" disabled selected>Loading playlists…</option>
         </select>
-        <button id="highlightAllBtn" class="btn">Highlight My Artists</button>
+        <button id="highlightAllBtn" class="btn" style="display: none;">Highlight All Artists</button>
       </div>
-
-      <div id="searchStatus" class="status-text" aria-live="polite"></div>
     </div>
   </header>
+
+  <div id="status-notification" class="status-notification"></div>
 
   <aside id="drawer" class="drawer" aria-hidden="true">
     <div class="drawer__header">
