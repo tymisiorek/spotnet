@@ -275,7 +275,6 @@ def get_playlist_artists(playlist_id):
                 if track and track.get('artists'):
                     # Iterate through each artist credited on the track
                     for artist in track['artists']:
-                        # If we haven't seen this artist ID before, add them
                         if artist['id'] and artist['id'] not in seen_artist_ids:
                             seen_artist_ids.add(artist['id'])
                             unique_artists.append({

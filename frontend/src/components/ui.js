@@ -1,9 +1,5 @@
 function qs(id) { return document.getElementById(id); }
 
-const drawer = qs('drawer');
-const drawerToggle = qs('drawerToggle');
-const drawerClose = qs('drawerClose');
-const backdrop = qs('drawerBackdrop');
 
 const statsToggle = document.querySelector('.card__toggle');
 const statsBody = qs('statsBody');
@@ -14,20 +10,6 @@ const statTopK = qs('statTopK');
 const uiWrapper = qs('ui');
 const proceedBtn = qs('proceed-btn'); 
 
-function openDrawer() {
-  drawer.classList.add('drawer--open');
-  backdrop.hidden = false;
-  drawer.setAttribute('aria-hidden', 'false');
-}
-function closeDrawer() {
-  drawer.classList.remove('drawer--open');
-  backdrop.hidden = true;
-  drawer.setAttribute('aria-hidden', 'true');
-}
-
-drawerToggle?.addEventListener('click', openDrawer);
-drawerClose?.addEventListener('click', closeDrawer);
-backdrop?.addEventListener('click', closeDrawer);
 
 if (statsToggle && statsBody) {
   statsToggle.addEventListener('click', () => {

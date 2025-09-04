@@ -9,15 +9,12 @@
 <body class="app-root">
   <header class="app-bar">
     <div class="app-bar__left">
-      <button id="drawerToggle" class="icon-btn" aria-label="Open sidebar" title="Open sidebar">
-        <span class="icon-bars"></span>
-      </button>
-      <h1 class="app-title">Spotify Collaboration Network</h1>
+      <h1 class="app-title">SpotNet</h1>
     </div>
 
     <div id="ui" class="toolbar-controls" style="display: none;">
       <div class="search-group">
-        <input id="searchInput" type="text" placeholder="Search artist by exact name…" />
+        <input id="searchInput" type="text" placeholder="Search artist name:" />
         <button id="searchBtn" class="btn btn--primary">Search</button>
       </div>
 
@@ -33,38 +30,6 @@
   </header>
 
   <div id="status-notification" class="status-notification"></div>
-
-  <aside id="drawer" class="drawer" aria-hidden="true">
-    <div class="drawer__header">
-      <h2 class="drawer__title">Panel</h2>
-      <button id="drawerClose" class="icon-btn" aria-label="Close sidebar" title="Close sidebar">
-        <span class="icon-close"></span>
-      </button>
-    </div>
-
-    <div class="drawer__content">
-      <section class="card">
-        <button class="card__toggle" type="button" aria-expanded="false" aria-controls="statsBody">
-          <span class="card__title">Stats</span>
-          <span class="chevron"></span>
-        </button>
-        <div id="statsBody" class="card__body" hidden>
-          <dl class="stats">
-            <div class="stats__row">
-              <dt>Nodes</dt><dd id="statNodes">–</dd>
-            </div>
-            <div class="stats__row">
-              <dt>Edges</dt><dd id="statEdges">–</dd>
-            </div>
-            <div class="stats__row">
-              <dt>Communities (top-K)</dt><dd id="statTopK">–</dd>
-            </div>
-          </dl>
-          <p class="muted">Stats populate after data loads and you click “Enter Visualization”.</p>
-        </div>
-      </section>
-    </div>
-  </aside>
 
   <main class="canvas-wrap">
     <div id="3d-graph"></div>
@@ -87,6 +52,8 @@
   </div>
 
   <script type="module" src="/src/components/graph.js"></script>
+  <script type="module" src="/src/components/graph_main.js"></script>
+  <script type="module" src="/src/components/playlists.js"></script>
   <script type="module" src="/src/components/ui.js"></script>
 </body>
 </html>
