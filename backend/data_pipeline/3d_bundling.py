@@ -17,17 +17,17 @@ This file was built pretty heavily using NotebookLM and Claude as the edge bundl
 '''
 
 
-NUM_ITERATIONS = 15
-INITIAL_BANDWIDTH_HMAX = 0.099
+NUM_ITERATIONS = 30
+INITIAL_BANDWIDTH_HMAX = 0.09
 KERNEL_REDUCTION_LAMBDA = 0.8
 # Prevent edges from moving if the density gradient nears zero
 EPSILON_GRADIENT = 1e-6
 # Reduce jaggedness
-SMOOTHING_ITERATIONS = 4
+SMOOTHING_ITERATIONS = 8
 # Resolution of grid to calculate density
-GRID_N = 90
-TEST_SIZE = 1500
-SAMPLES_PER_EDGE = 15
+GRID_N = 110
+TEST_SIZE = 15000
+SAMPLES_PER_EDGE = 35
 # Prevents edges from being attracted to their own density
 SELF_AVOIDANCE_BATCHES = 4
 
@@ -98,7 +98,7 @@ else:
 # The average distance for how close edges are to each other.
 avg_inter_edge_distance = float(distances.mean()) if distances.size > 0 else 0.05
 
-INITIAL_BANDWIDTH_HMAX = avg_inter_edge_distance * 0.8
+INITIAL_BANDWIDTH_HMAX = avg_inter_edge_distance * 0.5
 print(f"Average inter-edge distance: {avg_inter_edge_distance:.6f}")
 print(f"Initial bandwidth: {INITIAL_BANDWIDTH_HMAX:.6f}")
 
@@ -139,7 +139,7 @@ for eidx, (src, tgt) in enumerate(tqdm(edges_df.itertuples(index=False, name=Non
 
         rng = np.random.default_rng(123 + eidx)
         # Magnitude of the curve proportional to the edge length
-        curve_mag = rng.uniform(0.02, 0.08) * edge_len
+        curve_mag = rng.uniform(0.1, 0.25) * edge_len
 
         # Randomize phase of sine waves for curve uniqueness
         phase1 = rng.uniform(0, 2*np.pi)
@@ -150,8 +150,8 @@ for eidx, (src, tgt) in enumerate(tqdm(edges_df.itertuples(index=False, name=Non
             # The point on the straight line.
             linear = (1 - t) * p0 + t * p1
             # A sine wave based displacement in two perpendicular directions
-            curve1 = curve_mag * np.sin(np.pi * t + phase1) * perp1
-            curve2 = curve_mag * 0.5 * np.sin(2 * np.pi * t + phase2) * perp2
+            curve1 = curve_mag * np.sin(2 * np.pi * t + phase1) * perp1
+            curve2 = curve_mag * 0.5 * np.sin(4 * np.pi * t + phase2) * perp2
             edge_points.append(linear + curve1 + curve2)
     else:
         # If the edge has zero length, just create a straight line (which is just the point)
@@ -305,7 +305,7 @@ for iteration in range(1, NUM_ITERATIONS + 1):
                 dirs[valid] = grads[valid] / mags[valid, None]
 
                 # Scale by current bandwidth
-                disp = current_bandwidth * dirs
+                disp = 1.2 * current_bandwidth * dirs
                 interior[valid] += disp[valid]
 
                 # Update the main list of points with the new spots
