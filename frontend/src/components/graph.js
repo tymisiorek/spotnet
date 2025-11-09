@@ -24,9 +24,26 @@ export const state = {
   userPlaylists: [],
   selectedPlaylistArtists: [],
   graphData: { nodes: [], links: [] },
-  originalNodeLODs: [],
   highlightObjects: [],
-  theGraph: null
+  nodeGroups: [],
+  theGraph: null,
+  lodUpdateCallback: null,
+  lodUpdateHandle: null,
+  lodUpdateUsesTimeout: false
+};
+
+const LOD_LEVELS = [
+  { key: 'high', distance: LOD_DISTANCES.medium },
+  { key: 'medium', distance: LOD_DISTANCES.low },
+  { key: 'low', distance: Infinity }
+];
+
+const LOD_KEYS = LOD_LEVELS.map(l => l.key);
+
+const SHARED_SPHERE_GEOMETRIES = {
+  high: new THREE.SphereGeometry(SPHERE_RADIUS, 16, 16),
+  medium: new THREE.SphereGeometry(SPHERE_RADIUS, 10, 10),
+  low: new THREE.SphereGeometry(SPHERE_RADIUS, 6, 6)
 };
 
 export function setStatus(msg, ok = true) {
@@ -216,11 +233,93 @@ export function computeBBox(nodes){
   return { center, diag };
 }
 
-//i dont really see any proof that this instancing is working
+// Node instancing infrastructure with manual LOD management per color group
+function clearInstancedNodes() {
+  if (!state.nodeGroups?.length) {
+    return;
+  }
+  state.nodeGroups.forEach(group => {
+    LOD_KEYS.forEach(level => {
+      const mesh = group.meshes[level];
+      if (mesh) {
+        state.theGraph.scene().remove(mesh);
+        mesh.geometry?.dispose?.();
+        mesh.geometry = null;
+        mesh.userData.nodes = null;
+        mesh.material = null;
+      }
+    });
+    group.material?.dispose?.();
+    group.material = null;
+  });
+  state.nodeGroups = [];
+  state.PICKABLE_MESHES.length = 0;
+  if (state.lodUpdateHandle !== null) {
+    if (state.lodUpdateUsesTimeout) {
+      clearTimeout(state.lodUpdateHandle);
+    } else if (typeof cancelAnimationFrame === 'function') {
+      cancelAnimationFrame(state.lodUpdateHandle);
+    }
+    state.lodUpdateHandle = null;
+    state.lodUpdateUsesTimeout = false;
+  }
+  state.lodUpdateCallback = null;
+}
+
+function calculateGroupCenter(nodes) {
+  const center = new THREE.Vector3();
+  if (!nodes.length) {
+    return center;
+  }
+  for (const node of nodes) {
+    center.x += node.x;
+    center.y += node.y;
+    center.z += node.z || 0;
+  }
+  center.multiplyScalar(1 / nodes.length);
+  return center;
+}
+
+function selectLODLevel(distance) {
+  for (const level of LOD_LEVELS) {
+    if (distance <= level.distance) {
+      return level.key;
+    }
+  }
+  return 'low';
+}
+
+function updateInstancedNodeLODs(camera) {
+  if (!camera || !state.nodeGroups?.length) {
+    return;
+  }
+  const camPos = camera.position;
+  state.nodeGroups.forEach(group => {
+    if (group.hidden) {
+      LOD_KEYS.forEach(level => {
+        const mesh = group.meshes[level];
+        if (mesh) mesh.visible = false;
+      });
+      return;
+    }
+    const distance = camPos.distanceTo(group.center);
+    const nextLevel = selectLODLevel(distance);
+    if (nextLevel === group.currentLevel) {
+      return;
+    }
+    group.currentLevel = nextLevel;
+    LOD_KEYS.forEach(level => {
+      const mesh = group.meshes[level];
+      if (!mesh) {
+        return;
+      }
+      mesh.visible = level === nextLevel;
+    });
+  });
+}
+
 export function setupInstancedNodes(nodes, topCommunities){
-  const sphH = new THREE.SphereGeometry(SPHERE_RADIUS,8,8);
-  const sphM = new THREE.SphereGeometry(SPHERE_RADIUS,6,6);
-  const sphL = new THREE.SphereGeometry(SPHERE_RADIUS,5,5);
+  clearInstancedNodes();
 
   const byColor = {};
   nodes.forEach(n=>{
@@ -229,41 +328,87 @@ export function setupInstancedNodes(nodes, topCommunities){
     (byColor[color] ||= []).push(n);
   });
 
+  const nodeGroups = [];
   Object.entries(byColor).forEach(([color, arr])=>{
-    const mat = new THREE.MeshStandardMaterial({ color:+color, metalness:0.3, roughness:0.6 });
-    const lod = new THREE.LOD();
-    const m = new THREE.Matrix4();
+    const material = new THREE.MeshStandardMaterial({ color:+color, metalness:0.3, roughness:0.6 });
+    const matrix = new THREE.Matrix4();
+    const meshes = {};
 
-    const hi = new THREE.InstancedMesh(sphH, mat, arr.length);
-    const md = new THREE.InstancedMesh(sphM, mat, arr.length);
-    const lo = new THREE.InstancedMesh(sphL, mat, arr.length);
-
-    arr.forEach((node,i)=>{
-      m.setPosition(node.x,node.y,node.z||0);
-      hi.setMatrixAt(i,m);
-      md.setMatrixAt(i,m);
-      lo.setMatrixAt(i,m);
+    LOD_KEYS.forEach(level => {
+      const geometry = SHARED_SPHERE_GEOMETRIES[level].clone();
+      const mesh = new THREE.InstancedMesh(geometry, material, arr.length);
+      mesh.instanceMatrix.setUsage(THREE.StaticDrawUsage);
+      mesh.visible = level === 'high';
+      arr.forEach((node,i)=>{
+        matrix.setPosition(node.x, node.y, node.z || 0);
+        mesh.setMatrixAt(i, matrix);
+      });
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.userData.nodes = arr;
+      mesh.frustumCulled = false;
+      meshes[level] = mesh;
+      state.theGraph.scene().add(mesh);
+      state.PICKABLE_MESHES.push(mesh);
     });
 
-    hi.instanceMatrix.needsUpdate = true;
-    md.instanceMatrix.needsUpdate = true;
-    lo.instanceMatrix.needsUpdate = true;
-
-    hi.userData.nodes = arr;
-    md.userData.nodes = arr;
-    lo.userData.nodes = arr;
-
-    state.PICKABLE_MESHES.push(hi,md,lo);
-    lod.addLevel(hi, LOD_DISTANCES.high);
-    lod.addLevel(md, LOD_DISTANCES.medium);
-    lod.addLevel(lo, LOD_DISTANCES.low);
-    state.originalNodeLODs.push(lod);
-    state.theGraph.scene().add(lod);
+    const center = calculateGroupCenter(arr);
+    nodeGroups.push({ meshes, center, currentLevel: 'high', material, hidden: false });
   });
 
-  state.theGraph.nodeThreeObject(()=>{
-    return new THREE.Object3D();
+  state.nodeGroups = nodeGroups;
+
+  if (state.theGraph) {
+    updateInstancedNodeLODs(state.theGraph.camera());
+  }
+
+  if (!state.lodUpdateCallback) {
+    state.lodUpdateCallback = () => {
+      if (state.theGraph) {
+        updateInstancedNodeLODs(state.theGraph.camera());
+      }
+      const raf = typeof requestAnimationFrame === 'function';
+      state.lodUpdateUsesTimeout = !raf;
+      state.lodUpdateHandle = raf
+        ? requestAnimationFrame(state.lodUpdateCallback)
+        : setTimeout(state.lodUpdateCallback, 16);
+    };
+  }
+
+  if (state.lodUpdateHandle === null) {
+    state.lodUpdateCallback();
+  }
+
+  state.theGraph.nodeThreeObject(()=> new THREE.Object3D());
+}
+
+function setInstancedNodeVisibility(visible) {
+  if (!state.nodeGroups?.length) {
+    return;
+  }
+  state.nodeGroups.forEach(group => {
+    group.hidden = !visible;
+    if (visible) {
+      group.currentLevel = null;
+    }
+    LOD_KEYS.forEach(level => {
+      const mesh = group.meshes[level];
+      if (!mesh) {
+        return;
+      }
+      mesh.visible = visible ? level === group.currentLevel : false;
+    });
   });
+  if (visible && state.theGraph) {
+    updateInstancedNodeLODs(state.theGraph.camera());
+  }
+}
+
+export function hideInstancedNodes() {
+  setInstancedNodeVisibility(false);
+}
+
+export function showInstancedNodes() {
+  setInstancedNodeVisibility(true);
 }
 
 export function buildNameIndex(nodes){
