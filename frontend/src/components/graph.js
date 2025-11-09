@@ -10,7 +10,7 @@ export const EDGE_OPACITY = 0.1;
 export const PALETTE = [0x1f77b4,0xff7f0e,0x2ca02c,0xd62728,0x9467bd,0x8c564b,0xe377c2,0x7f7f7f,0xbcbd22,0x17becf,0xe6194b,0x3cb44b,0x4363d8,0xf58231,0x911eb4,0x46f0f0,0xf032e6,0xbcf60c,0xfabebe,0x008080];
 export const FALLBACK_COLOR = 0x444444;
 export const TOP_K = 25;
-export const LOD_DISTANCES = { high: 0, medium: 10000, low: 50000 };
+export const LOD_DISTANCES = { high: 0, medium: 1000, low: 5000 };
 export const DISPLAY_FIELD = 'name';
 
 export const state = {
@@ -39,9 +39,9 @@ const LOD_LEVELS = [
 const LOD_KEYS = LOD_LEVELS.map(l => l.key);
 
 const SHARED_SPHERE_GEOMETRIES = {
-  high: new THREE.SphereGeometry(SPHERE_RADIUS, 16, 16),
-  medium: new THREE.SphereGeometry(SPHERE_RADIUS, 10, 10),
-  low: new THREE.SphereGeometry(SPHERE_RADIUS, 6, 6)
+  high: new THREE.SphereGeometry(SPHERE_RADIUS, 12, 12),
+  medium: new THREE.SphereGeometry(SPHERE_RADIUS, 6, 6),
+  low: new THREE.SphereGeometry(SPHERE_RADIUS, 3, 3)
 };
 
 export function setStatus(msg, ok = true) {
@@ -350,8 +350,12 @@ export function setupInstancedNodes(nodes, topCommunities){
   }
 
   if (!state.lodUpdateCallback) {
-    state.lodUpdateCallback = (_, __, camera) => updateInstancedNodeLODs(camera);
-    state.theGraph.onRenderFrame(state.lodUpdateCallback);
+    const camera = state.theGraph.camera();
+    state.lodUpdateCallback = () => {
+      updateInstancedNodeLODs(camera);
+      requestAnimationFrame(state.lodUpdateCallback);
+    };
+    requestAnimationFrame(state.lodUpdateCallback);
   }
 
   state.theGraph.nodeThreeObject(()=> new THREE.Object3D());

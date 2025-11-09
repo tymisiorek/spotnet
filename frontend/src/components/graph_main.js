@@ -57,6 +57,32 @@ document.addEventListener('DOMContentLoaded', () => {
       if (EDGE_CAP!=null && links.length>EDGE_CAP) links = links.slice(0, EDGE_CAP);
       nodes.forEach(n => { n.fx=n.x; n.fy=n.y; n.fz=n.z ?? 0; });
 
+      //spread out graph:
+      // --- Uniform scaling to spread out the graph while preserving proportions ---
+      const { center, diag } = computeBBox(nodes);
+      const scale_factor = 3.0; // adjust this (2–5x typical)
+
+      for (const n of nodes) {
+        n.x = center.x + (n.x - center.x) * scale_factor;
+        n.y = center.y + (n.y - center.y) * scale_factor;
+        n.z = center.z + (n.z - center.z) * scale_factor;
+      }
+
+      // Scale edge-bundled coordinates too (if they exist)
+      for (const e of links) {
+        if (typeof e.points === 'string' && e.points.includes(',')) {
+          const pts = e.points.split('|').map(s => {
+            const [xs, ys, zs] = s.split(',').map(Number);
+            const x = center.x + (xs - center.x) * scale_factor;
+            const y = center.y + (ys - center.y) * scale_factor;
+            const z = center.z + (zs - center.z) * scale_factor;
+            return `${x},${y},${z}`;
+          });
+          e.points = pts.join('|');
+        }
+      }
+
+
       const counts = {}; nodes.forEach(n => { const id=+n.community; counts[id]=(counts[id]||0)+1; });
       const topCommunities = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,TOP_K).map(([id])=>+id);
 
@@ -65,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
       state.theGraph.graphData({ nodes, links });
       addOptimizedBundledEdges(links);
 
-      const { center, diag } = computeBBox(nodes);
+      // const { center, diag } = computeBBox(nodes);
       const cam = state.theGraph.camera();
       controls.target.set(center.x, center.y, center.z);
       cam.position.set(center.x, center.y, center.z + diag*0.8);
