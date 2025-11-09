@@ -27,9 +27,7 @@ export const state = {
   highlightObjects: [],
   nodeGroups: [],
   theGraph: null,
-  lodUpdateCallback: null,
-  lodUpdateHandle: null,
-  lodUpdateUsesTimeout: false
+  lodUpdateCallback: null
 };
 
 const LOD_LEVELS = [
@@ -254,16 +252,6 @@ function clearInstancedNodes() {
   });
   state.nodeGroups = [];
   state.PICKABLE_MESHES.length = 0;
-  if (state.lodUpdateHandle !== null) {
-    if (state.lodUpdateUsesTimeout) {
-      clearTimeout(state.lodUpdateHandle);
-    } else if (typeof cancelAnimationFrame === 'function') {
-      cancelAnimationFrame(state.lodUpdateHandle);
-    }
-    state.lodUpdateHandle = null;
-    state.lodUpdateUsesTimeout = false;
-  }
-  state.lodUpdateCallback = null;
 }
 
 function calculateGroupCenter(nodes) {
@@ -362,20 +350,8 @@ export function setupInstancedNodes(nodes, topCommunities){
   }
 
   if (!state.lodUpdateCallback) {
-    state.lodUpdateCallback = () => {
-      if (state.theGraph) {
-        updateInstancedNodeLODs(state.theGraph.camera());
-      }
-      const raf = typeof requestAnimationFrame === 'function';
-      state.lodUpdateUsesTimeout = !raf;
-      state.lodUpdateHandle = raf
-        ? requestAnimationFrame(state.lodUpdateCallback)
-        : setTimeout(state.lodUpdateCallback, 16);
-    };
-  }
-
-  if (state.lodUpdateHandle === null) {
-    state.lodUpdateCallback();
+    state.lodUpdateCallback = (_, __, camera) => updateInstancedNodeLODs(camera);
+    state.theGraph.onRenderFrame(state.lodUpdateCallback);
   }
 
   state.theGraph.nodeThreeObject(()=> new THREE.Object3D());
