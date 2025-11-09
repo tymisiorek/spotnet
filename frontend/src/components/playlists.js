@@ -1,4 +1,4 @@
-import { state, setStatus, BACKEND_BASE, parsePoints, SPHERE_RADIUS } from './graph.js';
+import { state, setStatus, BACKEND_BASE, parsePoints, SPHERE_RADIUS, hideInstancedNodes, showInstancedNodes } from './graph.js';
 import * as THREE from 'three';
 
 function ensureCache() {
@@ -134,7 +134,7 @@ export function resetHighlights() {
     state.theGraph.scene().remove(obj);
   });
   state.highlightObjects = [];
-  state.originalNodeLODs.forEach(lod => (lod.visible = true));
+  showInstancedNodes();
 }
 
 export function highlightArtistsInGraph(artistIds) {
@@ -148,7 +148,7 @@ export function highlightArtistsInGraph(artistIds) {
     set.has(l.source.id || l.source) && set.has(l.target.id || l.target)
   );
 
-  state.originalNodeLODs.forEach(lod => (lod.visible = false));
+  hideInstancedNodes();
 
   const sphereGeo = new THREE.SphereGeometry(SPHERE_RADIUS, 5, 5);
   const dimMat = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.1, roughness: 0.8 });
